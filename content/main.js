@@ -237,6 +237,10 @@
     });
   }
 
+  function registerAction(actionType, value) {
+    chrome.runtime.sendMessage({ type: 'REGISTER_ACTION', payload: { actionType, value } });
+  }
+
   // ═══════════════════════════════════════════════════════════
   // UI Generation & Handling
   // ═══════════════════════════════════════════════════════════
@@ -246,7 +250,8 @@
     POPOVER: 'promptpro-popover',
     PREVIEW: 'promptpro-preview',
     APPLY: 'promptpro-apply-btn',
-    RINGS: 'promptpro-score-rings'
+    RINGS: 'promptpro-score-rings',
+    SUGGESTIONS: 'promptpro-suggestions-box'
   };
 
   function createUIElements(adapter) {
@@ -333,6 +338,11 @@
     toneSection.appendChild(toneTitle);
     toneSection.appendChild(toneDropdown);
 
+    const suggestionsContainer = document.createElement('div');
+    suggestionsContainer.id = IDS.SUGGESTIONS;
+    suggestionsContainer.className = 'promptpro-suggestions';
+    // Will be populated by refreshPreview
+
     const actions = document.createElement('div');
     actions.className = 'promptpro-actions';
     
@@ -353,6 +363,7 @@
     popover.appendChild(header);
     popover.appendChild(preview);
     popover.appendChild(toneSection);
+    popover.appendChild(suggestionsContainer);
     popover.appendChild(actions);
 
     const container = document.createElement('div');
@@ -469,6 +480,34 @@
       } else {
         // Fallback: just show all as addition if deeply modified
         previewElement.innerHTML = `<span class="promptpro-preview__addition">${safeRewritten}</span>`;
+      }
+
+      // Populate AI Smart Suggestions
+      const suggestionsBox = document.getElementById(IDS.SUGGESTIONS);
+      if (suggestionsBox) {
+        suggestionsBox.innerHTML = '';
+        if (result.suggestions && result.suggestions.length > 0) {
+          result.suggestions.forEach(sug => {
+            const chip = document.createElement('button');
+            chip.className = 'promptpro-suggestion-chip';
+            chip.textContent = sug.text;
+            chip.title = `Apply ${sug.type} hint`;
+            
+            chip.addEventListener('click', (e) => {
+              e.stopPropagation();
+              // RUA Loop: Register acceptance
+              registerAction('suggestion_click', sug.id);
+              
+              // Append to original prompt context cleanly without modifying user's visible input box yet
+              STATE.originalText = STATE.originalText.trim() + `\n\n[Requirement: ${sug.text}]`;
+              
+              // Remove the chip
+              chip.remove();
+              refreshPreview(adapter);
+            });
+            suggestionsBox.appendChild(chip);
+          });
+        }
       }
 
       updateScoreViz(result.score);

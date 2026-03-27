@@ -305,6 +305,51 @@
   display: block;
 }
 
+/* ── Smart Suggestions (Phase 3) ────────────────────── */
+
+.promptpro-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  margin-bottom: 16px;
+}
+
+.promptpro-suggestion-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.promptpro-suggestion-chip::before {
+  content: '✦';
+  color: #a78bfa;
+  font-size: 10px;
+}
+
+.promptpro-suggestion-chip:hover {
+  background: rgba(167, 139, 250, 0.15);
+  border-color: rgba(167, 139, 250, 0.3);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.promptpro-suggestion-chip:active {
+  transform: scale(0.96);
+}
+
+.promptpro-suggestions:empty {
+  display: none;
+}
+
 /* ── Actions (Apply / Cancel) ───────────────────────── */
 
 .promptpro-actions {
@@ -464,6 +509,20 @@
   .promptpro-dropdown__item { color: rgba(0, 0, 0, 0.6); }
   .promptpro-dropdown__item:hover { background: rgba(0, 0, 0, 0.06); color: #000; }
   .promptpro-dropdown__item--active { background: rgba(0, 0, 0, 0.05); color: #000; }
+
+  .promptpro-suggestion-chip {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.08);
+    color: rgba(0, 0, 0, 0.7);
+  }
+  .promptpro-suggestion-chip::before {
+    color: #8b5cf6;
+  }
+  .promptpro-suggestion-chip:hover {
+    background: rgba(139, 92, 246, 0.1);
+    border-color: rgba(139, 92, 246, 0.2);
+    color: #000;
+  }
 
   .promptpro-action-btn--cancel { color: rgba(0, 0, 0, 0.6); }
   .promptpro-action-btn--cancel:hover { 

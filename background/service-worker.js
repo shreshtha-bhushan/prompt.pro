@@ -405,6 +405,94 @@ function scorePrompt(text) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// INTELLIGENCE LAYER: MEMORY & PROFILING (Phase 3)
+// ═══════════════════════════════════════════════════════════════
+
+const IntelligenceMemory = {
+  async getSession() {
+    if (!chrome.storage.session) return null; // Safety fallback
+    const data = await chrome.storage.session.get(['activeSession']);
+    return data.activeSession || {
+      sessionId: `sess_${Date.now()}`,
+      promptCount: 0,
+      recentTopics: [],
+      currentIntent: null
+    };
+  },
+
+  async updateSession(promptData) {
+    if (!chrome.storage.session) return null;
+    const session = await this.getSession();
+    session.promptCount += 1;
+    await chrome.storage.session.set({ activeSession: session });
+    return session;
+  },
+
+  async getProfile() {
+    const data = await chrome.storage.local.get(['userProfile']);
+    return data.userProfile || {
+      preferences: {
+        dominantTone: null,
+        favoredFormat: null
+      },
+      adaptiveWeights: {
+        brevity_modifier: 0.5,
+        detail_modifier: 0.5
+      },
+      acceptedSuggestions: {}
+    };
+  },
+
+  async registerAction(actionType, value, weightDelta = 0.1) {
+    const profile = await this.getProfile();
+    
+    if (actionType === 'tone_accept') {
+      profile.preferences.dominantTone = value;
+      profile.acceptedSuggestions[value] = (profile.acceptedSuggestions[value] || 0) + 1;
+    } else if (actionType === 'suggestion_click') {
+      profile.acceptedSuggestions[value] = (profile.acceptedSuggestions[value] || 0) + 1;
+    }
+    
+    await chrome.storage.local.set({ userProfile: profile });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════
+// INTELLIGENCE LAYER: SUGGESTION ENGINE (Phase 3)
+// ═══════════════════════════════════════════════════════════════
+
+async function generateSmartSuggestions(text, analysis) {
+  // Edge heuristics: extremely fast (<5ms) generation
+  const suggestions = [];
+  
+  // 1. Format Suggestions
+  if (analysis.isCodeRelated && !analysis.hasFormat) {
+    suggestions.push({ id: 'fmt_code', type: 'format', text: 'Ask for code blocks' });
+  } else if (analysis.isAnalysis && !analysis.hasFormat) {
+    suggestions.push({ id: 'fmt_table', type: 'format', text: 'Format as table' });
+  } else if (!analysis.hasFormat && analysis.wordCount > 30 && analysis.sentenceCount >= 3) {
+    suggestions.push({ id: 'fmt_bullet', type: 'format', text: 'Use bullet points' });
+  }
+
+  // 2. Constraint Suggestions
+  if (analysis.isCodeRelated && !analysis.hasConstraints) {
+    suggestions.push({ id: 'cnst_types', type: 'constraint', text: 'Include TS types' });
+  } else if (analysis.isWriting && !analysis.hasConstraints) {
+    suggestions.push({ id: 'cnst_concise', type: 'constraint', text: 'Be short & concise' });
+  } else if (!analysis.isCodeRelated && analysis.wordCount > 15 && !analysis.hasConstraints) {
+    suggestions.push({ id: 'cnst_n_hall', type: 'constraint', text: 'No hallucinations' });
+  }
+
+  // 3. Clarity Hooks
+  if (!analysis.hasRole) {
+    suggestions.push({ id: 'role_expert', type: 'clarity', text: 'Assign Expert Role' });
+  }
+
+  // Profile injection will happen here later
+  return suggestions.slice(0, 3);
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MESSAGE HANDLER
 // ═══════════════════════════════════════════════════════════════
 
@@ -437,6 +525,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // Score before
     const beforeScore = scorePrompt(text);
+    const analysis = analyzePrompt(text);
+
+    // AI Intelligence: Async Memory & Suggestion Fetch (non-blocking)
+    IntelligenceMemory.updateSession(text);
+    const suggestionsPromise = generateSmartSuggestions(text, analysis);
 
     // Rewrite
     const rewriteFn = REWRITE_STRATEGIES[strategy];
@@ -455,18 +548,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Score after
     const afterScore = scorePrompt(rewritten);
 
-    sendResponse({
-      rewritten,
-      original: text,
-      score: {
-        before: beforeScore,
-        after: afterScore
-      },
-      strategy,
-      tone: tone || null,
-      applied: true
+    suggestionsPromise.then(suggestions => {
+      sendResponse({
+        rewritten,
+        original: text,
+        score: {
+          before: beforeScore,
+          after: afterScore
+        },
+        suggestions,
+        strategy,
+        tone: tone || null,
+        applied: true
+      });
     });
 
+    return true;
+  }
+
+  if (message.type === 'REGISTER_ACTION') {
+    const { actionType, value } = message.payload || {};
+    if (actionType && value) {
+      IntelligenceMemory.registerAction(actionType, value);
+    }
+    sendResponse({ success: true });
     return true;
   }
 
