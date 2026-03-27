@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PromptPro</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <header class="popup__header">
+      <div class="popup__logo">✨</div>
+      <div class="popup__title">
+        <h1>PromptPro</h1>
+        <p class="popup__subtitle">Upgrade your prompts</p>
+      </div>
+      <label class="popup__toggle">
+        <input type="checkbox" id="enabled-toggle" checked>
+        <span class="popup__toggle-slider"></span>
+      </label>
+    </header>
+
+    <section class="popup__section">
+      <h2 class="popup__section-title">Default Strategy</h2>
+      <div class="popup__strategies" id="strategy-selector">
+        <button class="popup__strategy popup__strategy--active" data-strategy="enhance">
+          <span class="popup__strategy-icon">🚀</span>
+          <span class="popup__strategy-label">Enhance</span>
+        </button>
+        <button class="popup__strategy" data-strategy="elaborate">
+          <span class="popup__strategy-icon">📝</span>
+          <span class="popup__strategy-label">Elaborate</span>
+        </button>
+        <button class="popup__strategy" data-strategy="concise">
+          <span class="popup__strategy-icon">⚡</span>
+          <span class="popup__strategy-label">Concise</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="popup__section">
+      <h2 class="popup__section-title">Default Tone</h2>
+      <div class="popup__tones" id="tone-selector">
+        <button class="popup__tone popup__tone--active" data-tone="none">None</button>
+        <button class="popup__tone" data-tone="professional">Professional</button>
+        <button class="popup__tone" data-tone="casual">Casual</button>
+        <button class="popup__tone" data-tone="academic">Academic</button>
+        <button class="popup__tone" data-tone="creative">Creative</button>
+        <button class="popup__tone" data-tone="technical">Technical</button>
+        <button class="popup__tone" data-tone="direct">Direct</button>
+      </div>
+    </section>
+
+    <section class="popup__section">
+      <h2 class="popup__section-title">Options</h2>
+      <label class="popup__option">
+        <span>Show score badge</span>
+        <input type="checkbox" id="score-toggle" checked>
+      </label>
+    </section>
+
+    <footer class="popup__footer">
+      <div class="popup__sites">
+        <span class="popup__site-badge">ChatGPT</span>
+        <span class="popup__site-badge">Claude</span>
+        <span class="popup__site-badge">Gemini</span>
+      </div>
+      <p class="popup__privacy">🔒 100% local — your prompts never leave your browser</p>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
