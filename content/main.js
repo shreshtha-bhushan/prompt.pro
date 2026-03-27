@@ -21,7 +21,8 @@
     originalText: '',
     currentRewrite: null,
     currentScore: null,
-    activeTone: 'none'
+    activeTone: 'none',
+    db: null // Pre-fetched <10ms access Library & History
   };
 
   // ═══════════════════════════════════════════════════════════
@@ -386,8 +387,15 @@
       e.stopPropagation();
       if (STATE.currentRewrite) {
         adapter.setPromptText(STATE.currentRewrite);
-        const diff = STATE.currentScore.after.total - STATE.currentScore.before.total;
-        showToast(`Prompt upgraded! (+${diff > 0 ? diff : 0})`, 'success');
+        const delta = STATE.currentScore.after.total - STATE.currentScore.before.total;
+        
+        // Add to history async
+        chrome.runtime.sendMessage({ 
+          type: 'ADD_HISTORY', 
+          payload: { text: STATE.currentRewrite, score: STATE.currentScore.after.total }
+        });
+
+        showToast(`Prompt upgraded! (+${delta > 0 ? delta : 0})`, 'success');
         closePopover();
       }
     });
@@ -451,8 +459,21 @@
     applyBtn.disabled = true;
 
     try {
+      // Apply Tone and Context Blocks pre-processing inline
+      let finalToneText = STATE.activeTone;
+      let contextPayload = STATE.originalText;
+
+      // Append active context blocks silently to the prompt being upgraded
+      if (STATE.db && STATE.db.contextBlocks) {
+        const activeBlocks = STATE.db.contextBlocks.filter(b => b.active);
+        if (activeBlocks.length > 0) {
+          const blocksText = activeBlocks.map(b => `[Context: ${b.title}]\n${b.content}`).join('\n\n');
+          contextPayload = contextPayload.trim() + '\n\n' + blocksText;
+        }
+      }
+
       // Default to 'enhance' strategy for now inline.
-      const result = await requestRewrite(STATE.originalText, adapter.siteId, 'enhance', STATE.activeTone);
+      const result = await requestRewrite(contextPayload, adapter.siteId, 'enhance', finalToneText);
       
       if (result.error) {
         previewElement.innerHTML = `<span style="color:#f85149">Error: ${result.message}</span>`;
@@ -584,6 +605,11 @@
       this.timer = null;
     }
     start() {
+      // Pre-fetch DB for <10ms instantaneous Phase 4 UI renders
+      chrome.runtime.sendMessage({ type: 'GET_DATABASE' }, (res) => {
+        if (!chrome.runtime.lastError && res) STATE.db = res;
+      });
+
       this._attempt();
       new MutationObserver(() => {
         if (!isInjected()) {

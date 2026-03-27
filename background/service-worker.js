@@ -493,6 +493,54 @@ async function generateSmartSuggestions(text, analysis) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PROMPT MANAGEMENT DATABASE (Phase 4)
+// ═══════════════════════════════════════════════════════════════
+
+const PromptDatabase = {
+  async getDB() {
+    const data = await chrome.storage.local.get(['promptDb']);
+    return data.promptDb || {
+      history: [],
+      historyLimit: 50,
+      library: [
+        { id: 'lib_1', title: 'Example: Senior Review', text: 'Review this code for edge cases and efficiency. Ensure it follows modern standards.', tags: ['code'] }
+      ],
+      contextBlocks: [
+        { id: 'ctx_react', title: 'React Stack', content: 'Using React 18, Tailwind, TypeScript.', active: false },
+        { id: 'ctx_tone', title: 'Brand Tone', content: 'Brand voice is extremely energetic and concise.', active: false }
+      ]
+    };
+  },
+
+  async addHistory(text, score) {
+    const db = await this.getDB();
+    // Prepend to history, ensure no exact consecutive duplicates
+    if (db.history.length === 0 || db.history[0].text !== text) {
+      db.history.unshift({ id: `h_${Date.now()}`, text, score, timestamp: Date.now() });
+      if (db.history.length > db.historyLimit) db.history.pop();
+      await chrome.storage.local.set({ promptDb: db });
+    }
+  },
+
+  async toggleContextBlock(id, activeState) {
+    const db = await this.getDB();
+    const block = db.contextBlocks.find(b => b.id === id);
+    if (block) {
+      block.active = activeState;
+      await chrome.storage.local.set({ promptDb: db });
+    }
+    return db;
+  },
+
+  async saveToLibrary(title, text, tags = []) {
+    const db = await this.getDB();
+    db.library.unshift({ id: `lib_${Date.now()}`, title, text, tags });
+    await chrome.storage.local.set({ promptDb: db });
+    return db;
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════
 // MESSAGE HANDLER
 // ═══════════════════════════════════════════════════════════════
 

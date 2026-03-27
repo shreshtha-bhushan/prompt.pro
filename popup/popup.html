@@ -7,9 +7,11 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="popup">
+  <main class="popup" id="popup-main">
     <header class="popup__header">
-      <div class="popup__logo">✨</div>
+      <div class="popup__logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C12 2 12.5 7 15 9.5C17.5 12 22.5 12 22.5 12C22.5 12 17.5 12 15 14.5C12.5 17 12 22 12 22C12 22 11.5 17 9 14.5C6.5 12 1.5 12 1.5 12C1.5 12 6.5 12 9 9.5C11.5 7 12 2 12 2Z"/><path d="M19 1C19 1 19.2 3 20 3.8C20.8 4.6 22.8 4.8 22.8 4.8C22.8 4.8 20.8 4.8 20 5.6C19.2 6.4 19 8.4 19 8.4C19 8.4 18.8 6.4 18 5.6C17.2 4.8 15.2 4.8 15.2 4.8C15.2 4.8 17.2 4.6 18 3.8C18.8 3 19 1 19 1Z"/><path d="M5 4C5 4 5.2 6 6 6.8C6.8 7.6 8.8 7.8 8.8 7.8C8.8 7.8 6.8 7.8 6 8.6C5.2 9.4 5 11.4 5 11.4C5 11.4 4.8 9.4 4 8.6C3.2 7.8 1.2 7.8 1.2 7.8C1.2 7.8 3.2 7.6 4 6.8C4.8 6 5 4 5 4Z"/></svg>
+      </div>
       <div class="popup__title">
         <h1>PromptPro</h1>
         <p class="popup__subtitle">Upgrade your prompts</p>
@@ -20,80 +22,177 @@
       </label>
     </header>
 
-    <section class="popup__section">
-      <h2 class="popup__section-title">Default Strategy</h2>
-      <div class="popup__strategies" id="strategy-selector">
-        <button class="popup__strategy popup__strategy--active" data-strategy="enhance">
-          <span class="popup__strategy-icon">🚀</span>
-          <span class="popup__strategy-label">Enhance</span>
-        </button>
-        <button class="popup__strategy" data-strategy="elaborate">
-          <span class="popup__strategy-icon">📝</span>
-          <span class="popup__strategy-label">Elaborate</span>
-        </button>
-        <button class="popup__strategy" data-strategy="concise">
-          <span class="popup__strategy-icon">⚡</span>
-          <span class="popup__strategy-label">Concise</span>
-        </button>
-      </div>
-    </section>
+    <!-- Tab Contents -->
+    <div id="tab-content" class="popup__tab-content-container">
+      
+      <!-- Home Tab (Default Settings) -->
+      <div id="tab-home" class="popup__tab-pane popup__tab-pane--active">
+        <section class="popup__section">
+          <h2 class="popup__section-title">Strategy</h2>
+          <!-- Liquid Glass Grid Group -->
+          <div class="glass-radio-wrapper" id="strategy-selector">
+            <div class="glass-radio-group popup__strategies">
+              <input type="radio" name="strategy" id="strat-enhance" value="enhance" checked />
+              <label class="popup__strategy" for="strat-enhance">
+                <span class="popup__strategy-icon">🚀</span>
+                <span class="popup__strategy-label">Enhance</span>
+              </label>
+              
+              <input type="radio" name="strategy" id="strat-elaborate" value="elaborate" />
+              <label class="popup__strategy" for="strat-elaborate">
+                <span class="popup__strategy-icon">📝</span>
+                <span class="popup__strategy-label">Elaborate</span>
+              </label>
+              
+              <input type="radio" name="strategy" id="strat-concise" value="concise" />
+              <label class="popup__strategy" for="strat-concise">
+                <span class="popup__strategy-icon">⚡</span>
+                <span class="popup__strategy-label">Concise</span>
+              </label>
+              
+              <div class="glass-glider"></div>
+            </div>
+          </div>
+        </section>
 
-    <section class="popup__section">
-      <h2 class="popup__section-title">Default Tone</h2>
-      <div class="popup__dropdown" id="tone-selector" tabindex="0">
-        <div class="popup__dropdown-trigger">
-          <span class="popup__dropdown-value" id="tone-display">None</span>
-          <svg class="popup__dropdown-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        <section class="popup__section">
+          <h2 class="popup__section-title">Tone</h2>
+          <div class="popup__dropdown" id="tone-dropdown">
+            <div class="popup__dropdown-trigger">
+              <span id="current-tone">Professional</span>
+              <span class="popup__dropdown-chevron">
+                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1L5 5L9 1"/></svg>
+              </span>
+            </div>
+            <div class="popup__dropdown-menu">
+              <div class="popup__dropdown-item popup__dropdown-item--active" data-value="professional">
+                <span>Professional</span>
+                <svg class="popup__dropdown-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
+              </div>
+              <div class="popup__dropdown-item" data-value="casual">
+                <span>Casual</span>
+                <svg class="popup__dropdown-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
+              </div>
+              <div class="popup__dropdown-item" data-value="humorous">
+                <span>Humorous</span>
+                <svg class="popup__dropdown-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
+              </div>
+              <div class="popup__dropdown-item" data-value="formal">
+                <span>Formal</span>
+                <svg class="popup__dropdown-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
+              </div>
+              <div class="popup__dropdown-item" data-value="academic">
+                <span>Academic</span>
+                <svg class="popup__dropdown-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
+              </div>
+              <div class="popup__dropdown-item" data-value="creative">
+                <span>Creative</span>
+                <svg class="popup__dropdown-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
+              </div>
+              <div class="popup__dropdown-item" data-value="technical">
+                <span>Technical</span>
+                <svg class="popup__dropdown-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
+              </div>
+              <div class="popup__dropdown-item" data-value="direct">
+                <span>Direct</span>
+                <svg class="popup__dropdown-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="popup__section">
+          <h2 class="popup__section-title">Preferences</h2>
+          
+          <div class="popup__option">
+            <div class="popup__option-content">
+              <span class="popup__option-title">NO-FLUFF MODE</span>
+              <span class="popup__option-subtext">Remove fluff text</span>
+            </div>
+            <label class="popup__switch">
+              <input type="checkbox" id="no-fluff-toggle">
+              <span class="popup__switch-border"></span>
+              <span class="popup__switch-track"><span class="popup__switch-thumb"></span></span>
+            </label>
+          </div>
+
+          <div class="popup__option">
+            <div class="popup__option-content">
+              <span class="popup__option-title">SITE MEMORY</span>
+              <span class="popup__option-subtext">Remember settings per site</span>
+            </div>
+            <label class="popup__switch">
+              <input type="checkbox" id="site-memory-toggle">
+              <span class="popup__switch-border"></span>
+              <span class="popup__switch-track"><span class="popup__switch-thumb"></span></span>
+            </label>
+          </div>
+
+          <div class="popup__option" id="score-option-container">
+            <div class="popup__option-content">
+              <span class="popup__option-title">SCORE BADGE</span>
+              <span class="popup__option-subtext">Show optimization score badge</span>
+            </div>
+            <label class="popup__switch">
+              <input type="checkbox" id="score-toggle" checked>
+              <span class="popup__switch-border"></span>
+              <span class="popup__switch-track"><span class="popup__switch-thumb"></span></span>
+            </label>
+          </div>
+        </section>
+      </div>
+
+      <!-- History Tab -->
+      <div id="tab-history" class="popup__tab-pane">
+        <div class="popup__pane-header">
+          <span class="popup__section-title">Recent Upgrades</span>
+          <button class="popup__action-btn" id="history-clear-btn" title="Clear History">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
         </div>
-        <div class="popup__dropdown-menu">
-          <div class="popup__dropdown-item popup__dropdown-item--active" data-tone="none">
-            <span>None</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </div>
-          <div class="popup__dropdown-item" data-tone="professional">
-            <span>Professional</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </div>
-          <div class="popup__dropdown-item" data-tone="casual">
-            <span>Casual</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </div>
-          <div class="popup__dropdown-item" data-tone="academic">
-            <span>Academic</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </div>
-          <div class="popup__dropdown-item" data-tone="creative">
-            <span>Creative</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </div>
-          <div class="popup__dropdown-item" data-tone="technical">
-            <span>Technical</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </div>
-          <div class="popup__dropdown-item" data-tone="direct">
-            <span>Direct</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </div>
+        <div class="popup__scroll-area" id="history-content"></div>
+      </div>
+
+      <!-- Library Tab -->
+      <div id="tab-library" class="popup__tab-pane">
+        <div class="popup__pane-header">
+          <span class="popup__section-title">Prompt Library</span>
         </div>
+        <div class="popup__scroll-area" id="library-content"></div>
       </div>
-    </section>
 
-    <section class="popup__section">
-      <h2 class="popup__section-title">Options</h2>
-      <div class="popup__option" id="score-option-container">
-        <span>Show score badge</span>
-        <label class="popup__switch">
-          <input type="checkbox" id="score-toggle" checked>
-          <span class="popup__switch-border"></span>
-          <span class="popup__switch-track">
-            <span class="popup__switch-thumb"></span>
-          </span>
-        </label>
+      <!-- Context Tab -->
+      <div id="tab-context" class="popup__tab-pane">
+        <div class="popup__pane-header">
+          <span class="popup__section-title">Context Blocks</span>
+        </div>
+        <div class="popup__scroll-area" id="context-content"></div>
       </div>
-    </section>
 
-    <footer class="popup__footer">
-      <div class="popup__sites">
-        <span class="popup__site-badge">ChatGPT</span>
-        <span class="popup__site-badge">Claude</span>
-        <span class="popup__site-badge">Gemini</span>
+    </div>
+
+    <!-- Bottom Nav Dock -->
+    <nav class="bottom-nav" id="bottom-nav" data-active="home">
+      <div class="bottom-nav__item bottom-nav__item--active" data-tab="home">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="bottom-nav__label">Home</span>
       </div>
-      <p class="popup__privacy">🔒 100% local — your prompts never leave your browser</p>
-    </footer>
-  </div>
+      <div class="bottom-nav__item" data-tab="history">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span class="bottom-nav__label">History</span>
+      </div>
+      <div class="bottom-nav__item" data-tab="library">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        <span class="bottom-nav__label">Library</span>
+      </div>
+      <div class="bottom-nav__item" data-tab="context">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span class="bottom-nav__label">Context</span>
+      </div>
+      
+      <div class="bottom-nav__glider"></div>
+    </nav>
+  </main>
   <script src="popup.js"></script>
 </body>
 </html>
