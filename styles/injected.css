@@ -1,9 +1,8 @@
 /* ═══════════════════════════════════════════════════════
-   PromptPro — Injected Styles (Phase 1)
+   PromptPro — Injected Styles (Phase 2: Apple-Level UI)
    
-   Button, dropdown, tone pills, score badge breakdown,
-   loading spinner, toast notifications.
-   Position: relative only — never viewport-absolute.
+   Premium glassmorphism, black/grey/white motif, 
+   smooth momentum animations.
    ═══════════════════════════════════════════════════════ */
 
 /* ── Container ──────────────────────────────────────── */
@@ -12,262 +11,297 @@
   display: inline-flex;
   align-items: center;
   position: relative;
-  z-index: 10;
+  z-index: 1000;
   flex-shrink: 0;
 }
 
-/* ── Upgrade Button ─────────────────────────────────── */
+/* ── Inline Upgrade Button ──────────────────────────── */
 
 .promptpro-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 7px 14px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   margin-right: 4px;
-  border: none;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
-  color: #ffffff;
+  
+  /* Glassmorphism base */
+  background: rgba(30, 30, 35, 0.4);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  
+  color: #f1f5f9;
   font-size: 13px;
   font-weight: 600;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
-  position: relative;
   line-height: 1;
   user-select: none;
   -webkit-user-select: none;
-  outline: none;
-  box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3);
+  
+  /* Ambient Shadow + Out-Sine Transition */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: all 150ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .promptpro-btn:hover {
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #9333ea 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  background: rgba(50, 50, 60, 0.6);
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .promptpro-btn:active {
-  transform: translateY(0) scale(0.97);
-  box-shadow: 0 1px 4px rgba(99, 102, 241, 0.3);
+  transform: scale(0.96);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
-.promptpro-btn:focus-visible {
-  outline: 2px solid #818cf8;
-  outline-offset: 2px;
-}
-
-.promptpro-btn[disabled] {
-  opacity: 0.7;
-  cursor: not-allowed;
-  transform: none !important;
+.promptpro-btn--active-lock {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
 }
 
 .promptpro-btn__icon {
   font-size: 14px;
-  line-height: 1;
 }
-
-.promptpro-btn__label {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-/* ── Spinner (hidden by default) ────────────────────── */
 
 .promptpro-btn__spinner {
   display: none;
-  width: 14px;
-  height: 14px;
+  width: 14px; height: 14px;
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-top-color: #ffffff;
   border-radius: 50%;
   animation: promptpro-spin 0.6s linear infinite;
 }
 
-.promptpro-btn--loading .promptpro-btn__icon {
-  display: none;
-}
-
-.promptpro-btn--loading .promptpro-btn__label {
-  display: none;
-}
-
-.promptpro-btn--loading .promptpro-btn__spinner {
-  display: inline-block;
-}
-
-.promptpro-btn--loading {
-  padding: 7px 16px;
-}
+.promptpro-btn--loading .promptpro-btn__icon { display: none; }
+.promptpro-btn--loading .promptpro-btn__spinner { display: inline-block; }
 
 @keyframes promptpro-spin {
   to { transform: rotate(360deg); }
 }
 
-/* ── Dropdown ───────────────────────────────────────── */
+/* ── Popover Panel ──────────────────────────────────── */
 
-.promptpro-dropdown {
+.promptpro-popover {
   position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  min-width: 250px;
-  background: #1e1e2e;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  padding: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
-              0 0 0 1px rgba(255, 255, 255, 0.05);
+  bottom: calc(100% + 12px);
+  right: 0;
+  width: 360px;
+  
+  /* Deep Premium Glass */
+  background: rgba(24, 24, 28, 0.8);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 16px;
+  
+  /* Heavy diffuse shadow for deep layering */
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6), 
+              inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  
+  /* Hidden State */
   opacity: 0;
   visibility: hidden;
-  transform: translateY(4px);
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 9999;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  transform: translateY(10px) scale(0.96);
+  transform-origin: bottom right;
+  
+  /* Swift Spring Expansion */
+  transition: all 250ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  color: #e2e8f0;
 }
 
-.promptpro-dropdown--visible {
+.promptpro-popover--visible {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
 }
 
-.promptpro-dropdown__header {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #64748b;
-  padding: 6px 10px 4px;
-  margin-top: 4px;
-}
+/* ── Popover Header & Score Ring ────────────────────── */
 
-.promptpro-dropdown__header:first-child {
-  margin-top: 0;
-}
-
-.promptpro-dropdown__item {
+.promptpro-popover__header {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  width: 100%;
-  padding: 10px 12px;
-  margin: 0;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: #e2e8f0;
-  cursor: pointer;
-  transition: background 0.12s ease;
-  text-align: left;
-  font-family: inherit;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
-.promptpro-dropdown__item:hover {
-  background: rgba(99, 102, 241, 0.15);
-}
-
-.promptpro-dropdown__item:active {
-  background: rgba(99, 102, 241, 0.25);
-}
-
-.promptpro-dropdown__item-label {
-  font-size: 14px;
+.promptpro-popover__title {
+  font-size: 13px;
   font-weight: 600;
-  color: #f1f5f9;
+  color: #ffffff;
+  letter-spacing: -0.01em;
 }
 
-.promptpro-dropdown__item-desc {
-  font-size: 12px;
+.promptpro-score-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.promptpro-score-deltas {
+  font-size: 11px;
+  font-weight: 500;
   color: #94a3b8;
-  font-weight: 400;
+  font-family: 'SF Mono', ui-monospace, monospace;
 }
 
-/* ── Tone Preset Pills ──────────────────────────────── */
+.promptpro-score-ring {
+  display: flex;
+  gap: 3px;
+  height: 6px;
+}
 
-.promptpro-dropdown__tone-row {
+.promptpro-score-ring__segment {
+  width: 14px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  transition: all 400ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.promptpro-score-ring__segment--active {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
+}
+
+/* ── Preview Pane ───────────────────────────────────── */
+
+.promptpro-preview {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  height: 160px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  white-space: pre-wrap;
+  transition: opacity 150ms ease;
+}
+
+/* WebKit Scrollbar inside Preview */
+.promptpro-preview::-webkit-scrollbar { width: 6px; }
+.promptpro-preview::-webkit-scrollbar-track { background: transparent; }
+.promptpro-preview::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
+.promptpro-preview::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+.promptpro-preview--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.5;
+}
+
+.promptpro-preview__addition {
+  background: rgba(46, 160, 67, 0.12);
+  color: #56d364;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.promptpro-preview__original {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* ── Tone Selector ──────────────────────────────────── */
+
+.promptpro-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 8px;
+}
+
+.promptpro-tones {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 4px 6px 6px;
+  gap: 6px;
+  margin-bottom: 16px;
 }
 
 .promptpro-tone-pill {
-  padding: 4px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  background: transparent;
-  color: #94a3b8;
-  font-size: 11px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
   font-weight: 500;
-  font-family: inherit;
   cursor: pointer;
-  transition: all 0.12s ease;
-  white-space: nowrap;
+  transition: all 150ms ease;
 }
 
 .promptpro-tone-pill:hover {
-  background: rgba(99, 102, 241, 0.1);
-  border-color: rgba(99, 102, 241, 0.3);
-  color: #c4b5fd;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .promptpro-tone-pill--active {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: rgba(99, 102, 241, 0.5);
-  color: #a78bfa;
+  background: rgba(255, 255, 255, 0.95);
+  color: #000;
+  border-color: transparent;
+  box-shadow: 0 2px 6px rgba(255, 255, 255, 0.2);
 }
 
-/* ── Score Badge ────────────────────────────────────── */
+/* ── Actions (Apply / Cancel) ───────────────────────── */
 
-.promptpro-score-badge {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  padding: 5px 10px;
-  margin-left: 6px;
-  border-radius: 8px;
-  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
-  background: rgba(100, 116, 139, 0.15);
-  color: #94a3b8;
-  white-space: nowrap;
-  animation: promptpro-badge-in 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.promptpro-score-badge--improved {
-  background: rgba(34, 197, 94, 0.12);
-  color: #4ade80;
-}
-
-.promptpro-score-badge__total {
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.promptpro-score-badge__breakdown {
+.promptpro-actions {
   display: flex;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
-.promptpro-score-badge__axis {
-  font-size: 10px;
-  font-weight: 500;
-  opacity: 0.8;
+.promptpro-action-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  transition: all 150ms ease;
 }
 
-@keyframes promptpro-badge-in {
-  from {
-    opacity: 0;
-    transform: scale(0.85) translateX(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateX(0);
-  }
+.promptpro-action-btn--cancel {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.promptpro-action-btn--cancel:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.promptpro-action-btn--apply {
+  background: linear-gradient(135deg, #ffffff, #e2e8f0);
+  color: #0f172a;
+  box-shadow: 0 2px 6px rgba(255, 255, 255, 0.15);
+}
+
+.promptpro-action-btn--apply:hover {
+  background: #ffffff;
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.25);
+}
+
+.promptpro-action-btn--apply:active {
+  transform: scale(0.96);
+}
+
+.promptpro-action-btn--apply:disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 /* ── Toast Notifications ─────────────────────────────── */
@@ -281,18 +315,19 @@
   align-items: center;
   gap: 8px;
   padding: 10px 18px;
-  border-radius: 10px;
-  background: #1e1e2e;
+  border-radius: 12px;
+  background: rgba(15, 15, 20, 0.9);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #e2e8f0;
+  color: #ffffff;
   font-size: 13px;
+  font-weight: 500;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
   z-index: 99999;
   opacity: 0;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  transition: all 300ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
   pointer-events: none;
 }
 
@@ -302,80 +337,79 @@
 }
 
 .promptpro-toast--error {
-  border-color: rgba(239, 68, 68, 0.3);
-  background: rgba(30, 30, 46, 0.95);
+  border-color: rgba(248, 81, 73, 0.4);
 }
 
 .promptpro-toast--success {
-  border-color: rgba(34, 197, 94, 0.3);
-  background: rgba(30, 30, 46, 0.95);
+  border-color: rgba(46, 160, 67, 0.4);
 }
 
-.promptpro-toast__icon {
-  font-size: 16px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.promptpro-toast__text {
-  font-weight: 500;
-}
-
-/* ── Dark Mode Adaptations ──────────────────────────── */
+/* ── Light Mode Adaptations ─────────────────────────── */
 
 @media (prefers-color-scheme: light) {
-  .promptpro-dropdown {
-    background: #ffffff;
+  .promptpro-btn {
+    background: rgba(255, 255, 255, 0.6);
+    color: #1a1a1e;
     border-color: rgba(0, 0, 0, 0.1);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12),
-                0 0 0 1px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   }
 
-  .promptpro-dropdown__item {
-    color: #334155;
+  .promptpro-btn:hover {
+    background: rgba(255, 255, 255, 1);
+  }
+  
+  .promptpro-btn__spinner {
+    border-color: rgba(0, 0, 0, 0.1);
+    border-top-color: #1a1a1e;
   }
 
-  .promptpro-dropdown__item:hover {
-    background: rgba(99, 102, 241, 0.08);
+  .promptpro-popover {
+    background: rgba(255, 255, 255, 0.85);
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.12), 
+                0 0 0 1px rgba(0, 0, 0, 0.04);
+    color: #1a1a1e;
   }
 
-  .promptpro-dropdown__item-label {
-    color: #1e293b;
+  .promptpro-popover__title { color: #000; }
+  .promptpro-section-title { color: rgba(0, 0, 0, 0.5); }
+  
+  .promptpro-score-ring__segment { background: rgba(0, 0, 0, 0.08); }
+  .promptpro-score-ring__segment--active { 
+    background: rgba(0, 0, 0, 0.8); 
+    box-shadow: none; 
   }
 
-  .promptpro-dropdown__item-desc {
-    color: #64748b;
+  .promptpro-preview {
+    background: rgba(0, 0, 0, 0.04);
+    color: rgba(0, 0, 0, 0.8);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
   }
+  
+  .promptpro-preview__addition {
+    background: rgba(46, 160, 67, 0.15);
+    color: #1a7f37;
+  }
+
+  .promptpro-preview__original { color: #000; }
 
   .promptpro-tone-pill {
-    border-color: rgba(0, 0, 0, 0.1);
-    color: #64748b;
-  }
-
-  .promptpro-tone-pill:hover {
-    background: rgba(99, 102, 241, 0.06);
-  }
-
-  .promptpro-tone-pill--active {
-    background: rgba(99, 102, 241, 0.1);
-    border-color: rgba(99, 102, 241, 0.3);
-    color: #6366f1;
-  }
-
-  .promptpro-score-badge {
-    background: rgba(100, 116, 139, 0.08);
-    color: #64748b;
-  }
-
-  .promptpro-score-badge--improved {
-    background: rgba(34, 197, 94, 0.08);
-    color: #16a34a;
-  }
-
-  .promptpro-toast {
-    background: #ffffff;
     border-color: rgba(0, 0, 0, 0.08);
-    color: #334155;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    background: rgba(0, 0, 0, 0.03);
+    color: rgba(0, 0, 0, 0.6);
+  }
+  
+  .promptpro-tone-pill:hover { background: rgba(0, 0, 0, 0.08); color: #000; }
+  .promptpro-tone-pill--active {
+    background: #000;
+    color: #fff;
+  }
+
+  .promptpro-action-btn--cancel { color: rgba(0, 0, 0, 0.6); }
+  .promptpro-action-btn--cancel:hover { background: rgba(0, 0, 0, 0.05); color: #000; }
+  
+  .promptpro-action-btn--apply {
+    background: linear-gradient(135deg, #1a1a1e, #3a3a40);
+    color: #fff;
   }
 }

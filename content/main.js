@@ -1,13 +1,11 @@
 /**
- * PromptPro — Content Script (Phase 1)
+ * PromptPro — Content Script (Phase 2: Apple UI & Popover Flow)
  * 
- * Real-time prompt optimization with:
- * - Safe injection via execCommand + React event compat
- * - Debounce guard for rapid clicks
- * - Undo support (browser native undo stack)
- * - Toast notifications for edge cases
- * - Multi-dimensional score breakdown display
- * - Tone preset support in dropdown
+ * - Apple-style glassmorphic popover injection
+ * - "Preview then Apply" interaction state flow
+ * - Automatic background diffing/scoring
+ * - Tone toggle live refreshing 
+ * - Safe target injection on Apply
  */
 
 (function () {
@@ -17,9 +15,14 @@
   // State
   // ═══════════════════════════════════════════════════════════
 
-  let isUpgrading = false;        // Debounce guard for rapid clicks
-  let lastUpgradeTime = 0;        // Timestamp of last upgrade
-  const UPGRADE_COOLDOWN = 500;   // Minimum ms between upgrades
+  const STATE = {
+    isProcessing: false,
+    isOpen: false,
+    originalText: '',
+    currentRewrite: null,
+    currentScore: null,
+    activeTone: 'none'
+  };
 
   // ═══════════════════════════════════════════════════════════
   // Shadow DOM Traverser
@@ -69,16 +72,6 @@
       return input.tagName === 'TEXTAREA' ? input.value : input.innerText;
     }
 
-    /**
-     * SAFE INJECTION — Write text into the input field.
-     * 
-     * Strategy:
-     * 1. For contenteditable: Use execCommand('selectAll') + execCommand('insertText')
-     *    - This registers in the browser undo stack (Ctrl+Z works)
-     *    - Triggers React/ProseMirror change detection natively
-     * 2. Fallback for textarea: Native value setter + synthetic events
-     * 3. Cursor placed at end after injection
-     */
     setPromptText(text) {
       const input = this.getInputField();
       if (!input) return;
@@ -90,80 +83,37 @@
       }
     }
 
-    /**
-     * Textarea injection using native setter + React-compatible events.
-     * @private
-     */
     _setTextarea(input, text) {
-      const nativeSet = Object.getOwnPropertyDescriptor(
-        HTMLTextAreaElement.prototype, 'value'
-      )?.set;
-
-      if (nativeSet) {
-        nativeSet.call(input, text);
-      } else {
-        input.value = text;
-      }
-
-      // Dispatch events React listens for
+      const nativeSet = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+      if (nativeSet) nativeSet.call(input, text);
+      else input.value = text;
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
-
-      // Place cursor at end
       input.focus();
       input.setSelectionRange(text.length, text.length);
     }
 
-    /**
-     * ContentEditable injection using execCommand for undo support.
-     * Falls back to direct DOM manipulation if execCommand fails.
-     * @private
-     */
     _setContentEditable(input, text) {
       input.focus();
-
-      // Try execCommand path (supports undo stack)
       try {
-        // Select all existing content
         document.execCommand('selectAll', false, null);
-
-        // Insert new text (this replaces the selection)
         const success = document.execCommand('insertText', false, text);
-
         if (success) {
-          // Place cursor at end
           const selection = window.getSelection();
-          if (selection) {
-            selection.collapseToEnd();
-          }
-
-          // Fire input event for frameworks that need it
-          input.dispatchEvent(new InputEvent('input', {
-            bubbles: true,
-            composed: true,
-            inputType: 'insertText',
-            data: text
-          }));
+          if (selection) selection.collapseToEnd();
+          input.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: text }));
           return;
         }
-      } catch {
-        // execCommand failed, use fallback
-      }
+      } catch {}
 
-      // FALLBACK: Direct DOM manipulation (no undo support)
+      // Fallback
       input.innerHTML = '';
       const lines = text.split('\n');
       for (const line of lines) {
         const p = document.createElement('p');
-        if (line.trim() === '') {
-          p.innerHTML = '<br>';
-        } else {
-          p.textContent = line;
-        }
+        p.innerHTML = line.trim() === '' ? '<br>' : line;
         input.appendChild(p);
       }
-
-      // Place cursor at end
       const selection = window.getSelection();
       if (selection && input.lastChild) {
         const range = document.createRange();
@@ -172,13 +122,7 @@
         selection.removeAllRanges();
         selection.addRange(range);
       }
-
-      // Fire events
-      input.dispatchEvent(new InputEvent('input', {
-        bubbles: true,
-        composed: true,
-        inputType: 'insertText'
-      }));
+      input.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText' }));
     }
 
     _query(selectorChain) {
@@ -198,24 +142,9 @@
     get siteId() { return 'chatgpt'; }
     get selectors() {
       return {
-        input: [
-          '#prompt-textarea',
-          'div[contenteditable="true"][data-placeholder]',
-          'textarea[data-id="root"]',
-          'form textarea'
-        ],
-        toolbar: [
-          '#prompt-textarea ~ div',
-          'form div[class*="flex"][class*="items-end"]',
-          'form > div > div:last-child',
-          'form div[class*="justify-between"]'
-        ],
-        sendButton: [
-          'button[data-testid="send-button"]',
-          'button[aria-label="Send prompt"]',
-          'button[aria-label="Send"]',
-          'form button[class*="bottom"]:last-of-type'
-        ]
+        input: ['#prompt-textarea', 'div[contenteditable="true"][data-placeholder]', 'textarea[data-id="root"]', 'form textarea'],
+        toolbar: ['#prompt-textarea ~ div', 'form div[class*="flex"][class*="items-end"]', 'form > div > div:last-child', 'form div[class*="justify-between"]'],
+        sendButton: ['button[data-testid="send-button"]', 'button[aria-label="Send prompt"]', 'button[aria-label="Send"]', 'form button[class*="bottom"]:last-of-type']
       };
     }
   }
@@ -250,34 +179,17 @@
     get siteId() { return 'gemini'; }
     get selectors() {
       return {
-        input: [
-          'rich-textarea .ql-editor',
-          'div[contenteditable="true"][aria-label*="prompt"]',
-          '.text-input-field_textarea',
-          'div[contenteditable="true"][role="textbox"]'
-        ],
-        toolbar: [
-          '.input-area-container .trailing-actions',
-          'div[class*="action-wrapper"]',
-          '.input-area div:last-child',
-          '.bottom-container div[class*="actions"]'
-        ],
-        sendButton: [
-          'button.send-button',
-          'button[aria-label="Send message"]',
-          'button[mattooltip="Send"]',
-          '.input-area button:last-of-type'
-        ]
+        input: ['rich-textarea .ql-editor', 'div[contenteditable="true"][aria-label*="prompt"]'],
+        toolbar: ['.input-area-container .trailing-actions', '.bottom-container div[class*="actions"]'],
+        sendButton: ['button.send-button', 'button[aria-label="Send message"]', 'button[mattooltip="Send"]']
       };
     }
-
     getInputField() {
       const fromChain = this._query(this.selectors.input);
       if (fromChain) return fromChain;
       const richTextarea = document.querySelector('rich-textarea');
       if (richTextarea?.shadowRoot) {
-        return richTextarea.shadowRoot.querySelector('.ql-editor')
-          || richTextarea.shadowRoot.querySelector('[contenteditable="true"]');
+        return richTextarea.shadowRoot.querySelector('.ql-editor') || richTextarea.shadowRoot.querySelector('[contenteditable="true"]');
       }
       return null;
     }
@@ -285,12 +197,9 @@
 
   function resolveAdapter() {
     const host = location.hostname;
-    if (host.includes('chatgpt.com') || host.includes('chat.openai.com'))
-      return new ChatGPTAdapter();
-    if (host.includes('claude.ai'))
-      return new ClaudeAdapter();
-    if (host.includes('gemini.google.com'))
-      return new GeminiAdapter();
+    if (host.includes('chatgpt.com') || host.includes('chat.openai.com')) return new ChatGPTAdapter();
+    if (host.includes('claude.ai')) return new ClaudeAdapter();
+    if (host.includes('gemini.google.com')) return new GeminiAdapter();
     return null;
   }
 
@@ -299,31 +208,13 @@
   // ═══════════════════════════════════════════════════════════
 
   function showToast(message, type = 'info') {
-    // Remove existing toast
     document.getElementById('promptpro-toast')?.remove();
-
     const toast = document.createElement('div');
     toast.id = 'promptpro-toast';
     toast.className = `promptpro-toast promptpro-toast--${type}`;
-
-    const icon = document.createElement('span');
-    icon.className = 'promptpro-toast__icon';
-    icon.textContent = type === 'error' ? '⚠️' : type === 'success' ? '✅' : 'ℹ️';
-
-    const text = document.createElement('span');
-    text.className = 'promptpro-toast__text';
-    text.textContent = message;
-
-    toast.appendChild(icon);
-    toast.appendChild(text);
+    toast.innerHTML = `<span class="promptpro-toast__icon">${type === 'error' ? '⚠️' : '✅'}</span><span class="promptpro-toast__text">${message}</span>`;
     document.body.appendChild(toast);
-
-    // Animate in
-    requestAnimationFrame(() => {
-      toast.classList.add('promptpro-toast--visible');
-    });
-
-    // Auto-hide after 3s
+    requestAnimationFrame(() => toast.classList.add('promptpro-toast--visible'));
     setTimeout(() => {
       toast.classList.remove('promptpro-toast--visible');
       setTimeout(() => toast.remove(), 300);
@@ -331,432 +222,318 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // Button Injector
+  // Background API
   // ═══════════════════════════════════════════════════════════
 
-  const BUTTON_ID = 'promptpro-upgrade-btn';
-  const DROPDOWN_ID = 'promptpro-dropdown';
-
-  function isInjected() {
-    return !!document.getElementById(BUTTON_ID);
-  }
-
-  function setButtonLoading(loading) {
-    const btn = document.getElementById(BUTTON_ID);
-    if (!btn) return;
-    if (loading) {
-      btn.classList.add('promptpro-btn--loading');
-      btn.setAttribute('disabled', 'true');
-    } else {
-      btn.classList.remove('promptpro-btn--loading');
-      btn.removeAttribute('disabled');
-    }
-  }
-
-  function createButton(onClick) {
-    const btn = document.createElement('button');
-    btn.id = BUTTON_ID;
-    btn.className = 'promptpro-btn';
-    btn.type = 'button';
-    btn.setAttribute('data-promptpro', 'true');
-    btn.title = 'Upgrade prompt with PromptPro';
-
-    const icon = document.createElement('span');
-    icon.className = 'promptpro-btn__icon';
-    icon.textContent = '✨';
-
-    const label = document.createElement('span');
-    label.className = 'promptpro-btn__label';
-    label.textContent = 'Upgrade';
-
-    const spinner = document.createElement('span');
-    spinner.className = 'promptpro-btn__spinner';
-
-    btn.appendChild(icon);
-    btn.appendChild(label);
-    btn.appendChild(spinner);
-
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      onClick();
-    });
-    return btn;
-  }
-
-  function createDropdown(onSelect) {
-    const dropdown = document.createElement('div');
-    dropdown.id = DROPDOWN_ID;
-    dropdown.className = 'promptpro-dropdown';
-
-    // Strategy section
-    const stratHeader = document.createElement('div');
-    stratHeader.className = 'promptpro-dropdown__header';
-    stratHeader.textContent = 'Strategy';
-    dropdown.appendChild(stratHeader);
-
-    const strategies = [
-      { id: 'enhance', label: '🚀 Enhance', desc: 'Add role, context & structure' },
-      { id: 'elaborate', label: '📝 Elaborate', desc: 'Chain-of-thought reasoning' },
-      { id: 'concise', label: '⚡ Concise', desc: 'Tighten & focus response' }
-    ];
-
-    for (const strat of strategies) {
-      const item = document.createElement('button');
-      item.className = 'promptpro-dropdown__item';
-      item.type = 'button';
-      item.setAttribute('data-strategy', strat.id);
-
-      const itemLabel = document.createElement('span');
-      itemLabel.className = 'promptpro-dropdown__item-label';
-      itemLabel.textContent = strat.label;
-
-      const itemDesc = document.createElement('span');
-      itemDesc.className = 'promptpro-dropdown__item-desc';
-      itemDesc.textContent = strat.desc;
-
-      item.appendChild(itemLabel);
-      item.appendChild(itemDesc);
-
-      item.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dropdown.classList.remove('promptpro-dropdown--visible');
-        onSelect(strat.id, getSelectedTone());
-      });
-
-      dropdown.appendChild(item);
-    }
-
-    // Tone section
-    const toneHeader = document.createElement('div');
-    toneHeader.className = 'promptpro-dropdown__header';
-    toneHeader.textContent = 'Tone (optional)';
-    dropdown.appendChild(toneHeader);
-
-    const toneRow = document.createElement('div');
-    toneRow.className = 'promptpro-dropdown__tone-row';
-    toneRow.id = 'promptpro-tone-row';
-
-    const tones = [
-      { id: 'none', label: 'None' },
-      { id: 'professional', label: 'Pro' },
-      { id: 'casual', label: 'Casual' },
-      { id: 'academic', label: 'Academic' },
-      { id: 'creative', label: 'Creative' },
-      { id: 'technical', label: 'Tech' },
-      { id: 'direct', label: 'Direct' }
-    ];
-
-    for (const tone of tones) {
-      const pill = document.createElement('button');
-      pill.className = `promptpro-tone-pill ${tone.id === 'none' ? 'promptpro-tone-pill--active' : ''}`;
-      pill.type = 'button';
-      pill.setAttribute('data-tone', tone.id);
-      pill.textContent = tone.label;
-
-      pill.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        // Toggle active state
-        toneRow.querySelectorAll('.promptpro-tone-pill').forEach(p =>
-          p.classList.remove('promptpro-tone-pill--active')
-        );
-        pill.classList.add('promptpro-tone-pill--active');
-      });
-
-      toneRow.appendChild(pill);
-    }
-
-    dropdown.appendChild(toneRow);
-
-    return dropdown;
-  }
-
-  function getSelectedTone() {
-    const active = document.querySelector('.promptpro-tone-pill--active');
-    const tone = active?.getAttribute('data-tone');
-    return tone === 'none' ? null : tone;
-  }
-
-  function showScoreBadge(score) {
-    let badge = document.getElementById('promptpro-score-badge');
-    if (!badge) return;
-
-    const before = score.before;
-    const after = score.after;
-    const delta = after.total - before.total;
-    const sign = delta > 0 ? '+' : '';
-
-    // Build breakdown HTML using textContent only
-    badge.innerHTML = '';
-
-    const totalLine = document.createElement('div');
-    totalLine.className = 'promptpro-score-badge__total';
-    totalLine.textContent = `${before.total} → ${after.total} (${sign}${delta})`;
-
-    const breakdown = document.createElement('div');
-    breakdown.className = 'promptpro-score-badge__breakdown';
-
-    const axes = [
-      { key: 'clarity', label: 'Clar', emoji: '💡' },
-      { key: 'specificity', label: 'Spec', emoji: '🎯' },
-      { key: 'structure', label: 'Strc', emoji: '📐' },
-      { key: 'intent', label: 'Intn', emoji: '🎪' }
-    ];
-
-    for (const axis of axes) {
-      const axisEl = document.createElement('span');
-      axisEl.className = 'promptpro-score-badge__axis';
-
-      const diff = after[axis.key] - before[axis.key];
-      const diffSign = diff > 0 ? '+' : '';
-      axisEl.textContent = `${axis.emoji}${diffSign}${diff}`;
-      axisEl.title = `${axis.label}: ${before[axis.key]} → ${after[axis.key]}`;
-
-      breakdown.appendChild(axisEl);
-    }
-
-    badge.appendChild(totalLine);
-    badge.appendChild(breakdown);
-
-    badge.style.display = 'inline-flex';
-    badge.className = `promptpro-score-badge ${delta > 0 ? 'promptpro-score-badge--improved' : ''}`;
-
-    // Auto-hide after 6 seconds
-    setTimeout(() => { badge.style.display = 'none'; }, 6000);
-  }
-
-  function injectButton(adapter, onUpgrade) {
-    if (isInjected()) return;
-
-    const sendButton = adapter.getSendButton();
-    const toolbar = adapter.getToolbar();
-
-    const btn = createButton(() => {
-      const dd = document.getElementById(DROPDOWN_ID);
-      if (dd) dd.classList.toggle('promptpro-dropdown--visible');
-    });
-
-    const dropdown = createDropdown((strategy, tone) => {
-      onUpgrade(strategy, tone);
-    });
-
-    const badge = document.createElement('div');
-    badge.id = 'promptpro-score-badge';
-    badge.className = 'promptpro-score-badge';
-    badge.style.display = 'none';
-
-    const container = document.createElement('div');
-    container.className = 'promptpro-container';
-    container.appendChild(btn);
-    container.appendChild(dropdown);
-    container.appendChild(badge);
-
-    if (sendButton?.parentElement) {
-      sendButton.parentElement.insertBefore(container, sendButton);
-    } else if (toolbar) {
-      toolbar.appendChild(container);
-    }
-
-    document.addEventListener('click', (e) => {
-      const dd = document.getElementById(DROPDOWN_ID);
-      if (dd && !container.contains(e.target)) {
-        dd.classList.remove('promptpro-dropdown--visible');
-      }
-    }, { capture: true });
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // Prompt Bridge
-  // ═══════════════════════════════════════════════════════════
-
-  function upgradePrompt(text, siteId, strategy, tone) {
+  function requestRewrite(text, siteId, strategy, tone) {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
         { type: 'UPGRADE_PROMPT', payload: { text, siteId, strategy, tone } },
         (response) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-            return;
-          }
-          resolve(response);
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else resolve(response);
         }
       );
     });
   }
 
   // ═══════════════════════════════════════════════════════════
-  // Observer Manager
+  // UI Generation & Handling
   // ═══════════════════════════════════════════════════════════
 
-  class ObserverManager {
-    constructor(adapter, onUpgrade) {
-      this.adapter = adapter;
-      this.onUpgrade = onUpgrade;
-      this.observer = null;
-      this.debounceTimer = null;
-      this.isProcessing = false;
-    }
+  const IDS = {
+    BTN: 'promptpro-upgrade-btn',
+    POPOVER: 'promptpro-popover',
+    PREVIEW: 'promptpro-preview',
+    APPLY: 'promptpro-apply-btn',
+    RINGS: 'promptpro-score-rings'
+  };
 
-    start() {
-      this._reinject();
+  function createUIElements(adapter) {
+    // 1. Anchor Button
+    const btn = document.createElement('button');
+    btn.id = IDS.BTN;
+    btn.className = 'promptpro-btn';
+    btn.innerHTML = `<span class="promptpro-btn__icon" style="font-size: 15px; filter: grayscale(100%) brightness(200%);">✨</span><span class="promptpro-btn__spinner"></span>`;
+    
+    // 2. Popover
+    const popover = document.createElement('div');
+    popover.id = IDS.POPOVER;
+    popover.className = 'promptpro-popover';
 
-      this.observer = new MutationObserver(() => {
-        if (isInjected()) return;
-        clearTimeout(this.debounceTimer);
-        this.debounceTimer = setTimeout(() => {
-          requestAnimationFrame(() => this._reinject());
-        }, 200);
+    const header = document.createElement('div');
+    header.className = 'promptpro-popover__header';
+    header.innerHTML = `
+      <div class="promptpro-popover__title">Rewrite Preview</div>
+      <div class="promptpro-score-container">
+        <div class="promptpro-score-deltas" id="promptpro-score-deltas"></div>
+        <div class="promptpro-score-ring" id="${IDS.RINGS}">
+          <div class="promptpro-score-ring__segment" title="Clarity"></div>
+          <div class="promptpro-score-ring__segment" title="Specificity"></div>
+          <div class="promptpro-score-ring__segment" title="Structure"></div>
+          <div class="promptpro-score-ring__segment" title="Intent"></div>
+        </div>
+      </div>
+    `;
+
+    const preview = document.createElement('div');
+    preview.id = IDS.PREVIEW;
+    preview.className = 'promptpro-preview';
+    preview.textContent = 'Analyzing...';
+
+    const toneSection = document.createElement('div');
+    const toneTitle = document.createElement('div');
+    toneTitle.className = 'promptpro-section-title';
+    toneTitle.textContent = 'Tone tweaks';
+    
+    const tonesContainer = document.createElement('div');
+    tonesContainer.className = 'promptpro-tones';
+    const tones = ['none', 'professional', 'casual', 'academic', 'creative', 'technical', 'direct'];
+    tones.forEach(t => {
+      const pill = document.createElement('button');
+      pill.className = `promptpro-tone-pill ${t === 'none' ? 'promptpro-tone-pill--active' : ''}`;
+      pill.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+      pill.dataset.tone = t;
+      pill.addEventListener('click', (e) => {
+        tonesContainer.querySelectorAll('.promptpro-tone-pill').forEach(p => p.classList.remove('promptpro-tone-pill--active'));
+        pill.classList.add('promptpro-tone-pill--active');
+        STATE.activeTone = t === 'none' ? null : t;
+        refreshPreview(adapter);
       });
+      tonesContainer.appendChild(pill);
+    });
+    toneSection.appendChild(toneTitle);
+    toneSection.appendChild(tonesContainer);
 
-      this.observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
+    const actions = document.createElement('div');
+    actions.className = 'promptpro-actions';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'promptpro-action-btn promptpro-action-btn--cancel';
+    cancelBtn.textContent = 'Cancel';
+    
+    const applyBtn = document.createElement('button');
+    applyBtn.id = IDS.APPLY;
+    applyBtn.className = 'promptpro-action-btn promptpro-action-btn--apply';
+    applyBtn.textContent = 'Apply';
 
-      this._watchNavigation();
+    actions.appendChild(cancelBtn);
+    actions.appendChild(applyBtn);
 
-      document.addEventListener('focusin', (e) => {
-        if (isInjected()) return;
-        const t = e.target;
-        if (t?.contentEditable === 'true' || t?.tagName === 'TEXTAREA') {
-          setTimeout(() => this._reinject(), 100);
-        }
-      });
-    }
+    popover.appendChild(header);
+    popover.appendChild(preview);
+    popover.appendChild(toneSection);
+    popover.appendChild(actions);
 
-    stop() {
-      this.observer?.disconnect();
-      clearTimeout(this.debounceTimer);
-    }
+    const container = document.createElement('div');
+    container.className = 'promptpro-container';
+    container.appendChild(btn);
+    container.appendChild(popover);
 
-    _reinject() {
-      if (this.isProcessing || isInjected()) return;
-      this.isProcessing = true;
-      try {
-        injectButton(this.adapter, this.onUpgrade);
-      } catch (err) {
-        console.warn('[PromptPro] Reinjection failed:', err.message);
-      } finally {
-        this.isProcessing = false;
+    // Events
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePopover(adapter);
+    });
+
+    cancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closePopover();
+    });
+
+    applyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (STATE.currentRewrite) {
+        adapter.setPromptText(STATE.currentRewrite);
+        const diff = STATE.currentScore.after.total - STATE.currentScore.before.total;
+        showToast(`Prompt upgraded! (+${diff > 0 ? diff : 0})`, 'success');
+        closePopover();
       }
-    }
+    });
 
-    _watchNavigation() {
-      const origPush = history.pushState;
-      history.pushState = function (...args) {
-        origPush.apply(this, args);
-        window.dispatchEvent(new CustomEvent('promptpro:navigate'));
-      };
-      const origReplace = history.replaceState;
-      history.replaceState = function (...args) {
-        origReplace.apply(this, args);
-        window.dispatchEvent(new CustomEvent('promptpro:navigate'));
-      };
-      window.addEventListener('popstate', () => {
-        window.dispatchEvent(new CustomEvent('promptpro:navigate'));
-      });
-      window.addEventListener('promptpro:navigate', () => {
-        setTimeout(() => {
-          document.querySelector('.promptpro-container')?.remove();
-          this._reinject();
-        }, 500);
-      });
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (STATE.isOpen && !container.contains(e.target)) {
+        closePopover();
+      }
+    }, { capture: true });
+
+    return container;
+  }
+
+  // ── Popover Flow State ────────────────────────────────
+
+  function togglePopover(adapter) {
+    if (STATE.isOpen) {
+      closePopover();
+    } else {
+      openPopover(adapter);
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // Handle Upgrade Click (with edge case guards)
-  // ═══════════════════════════════════════════════════════════
-
-  async function handleUpgrade(adapter, strategy, tone) {
-    // EDGE CASE: Rapid click guard
-    const now = Date.now();
-    if (isUpgrading || (now - lastUpgradeTime) < UPGRADE_COOLDOWN) {
-      console.log('[PromptPro] Upgrade in progress or cooldown active, skipping');
-      return;
-    }
-
+  function openPopover(adapter) {
     const text = adapter.getPromptText();
-
-    // EDGE CASE: Empty prompt
     if (!text || !text.trim()) {
       showToast('Type a prompt first before upgrading', 'error');
       return;
     }
 
-    // Lock
-    isUpgrading = true;
-    lastUpgradeTime = now;
-    setButtonLoading(true);
+    STATE.isOpen = true;
+    STATE.originalText = text;
+    
+    const popover = document.getElementById(IDS.POPOVER);
+    const btn = document.getElementById(IDS.BTN);
+    popover.classList.add('promptpro-popover--visible');
+    btn.classList.add('promptpro-btn--active-lock');
+    
+    // Initial fetch
+    refreshPreview(adapter);
+  }
+
+  function closePopover() {
+    STATE.isOpen = false;
+    const popover = document.getElementById(IDS.POPOVER);
+    const btn = document.getElementById(IDS.BTN);
+    if(popover) popover.classList.remove('promptpro-popover--visible');
+    if(btn) btn.classList.remove('promptpro-btn--active-lock');
+  }
+
+  async function refreshPreview(adapter) {
+    if (STATE.isProcessing) return;
+    STATE.isProcessing = true;
+
+    const previewElement = document.getElementById(IDS.PREVIEW);
+    const applyBtn = document.getElementById(IDS.APPLY);
+    const popover = document.getElementById(IDS.POPOVER);
+    
+    previewElement.innerHTML = '<div class="promptpro-preview--loading">Analyzing and enhancing...</div>';
+    applyBtn.disabled = true;
 
     try {
-      const result = await upgradePrompt(text, adapter.siteId, strategy, tone);
-
+      // Default to 'enhance' strategy for now inline.
+      const result = await requestRewrite(STATE.originalText, adapter.siteId, 'enhance', STATE.activeTone);
+      
       if (result.error) {
-        if (result.error === 'EMPTY') {
-          showToast(result.message || 'Please type a prompt first', 'error');
-        } else {
-          showToast(result.message || 'Failed to upgrade prompt', 'error');
-        }
+        previewElement.innerHTML = `<span style="color:#f85149">Error: ${result.message}</span>`;
         return;
       }
 
-      // Write rewritten prompt back to the input (safe injection)
-      adapter.setPromptText(result.rewritten);
+      STATE.currentRewrite = result.rewritten;
+      STATE.currentScore = result.score;
 
-      // Show score badge with multi-dimensional breakdown
-      if (result.score) {
-        showScoreBadge(result.score);
+      // Smart Highlight Diff
+      // To highlight additions without a huge diff library, we attempt to split or wrap the original text payload.
+      // Since our rewriter often encapsulates the original text, we can do a simple string replacement.
+      // We encode HTML entities to be safe.
+      const escapeHtml = (unsafe) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      
+      let safeOriginal = escapeHtml(STATE.originalText);
+      let safeRewritten = escapeHtml(result.rewritten);
+
+      if (safeRewritten.includes(safeOriginal) && safeOriginal.length > 0) {
+        // Highlighting trick: wrap everything, then unwrap the exact original string
+        const parts = safeRewritten.split(safeOriginal);
+        previewElement.innerHTML = parts.map(p => 
+          p ? `<span class="promptpro-preview__addition">${p}</span>` : ''
+        ).join(`<span class="promptpro-preview__original">${safeOriginal}</span>`);
+      } else {
+        // Fallback: just show all as addition if deeply modified
+        previewElement.innerHTML = `<span class="promptpro-preview__addition">${safeRewritten}</span>`;
       }
 
-      // Success toast
-      const delta = result.score.after.total - result.score.before.total;
-      if (delta > 0) {
-        showToast(`Prompt upgraded! Score: ${result.score.before.total} → ${result.score.after.total} (+${delta})`, 'success');
-      }
-
-      console.log(
-        `[PromptPro] Upgraded (${strategy}${tone ? '/' + tone : ''}): ` +
-        `${result.score.before.total} → ${result.score.after.total}`
-      );
+      updateScoreViz(result.score);
+      applyBtn.disabled = false;
+      
     } catch (err) {
-      console.error('[PromptPro] Upgrade failed:', err);
-      showToast('Upgrade failed — please try again', 'error');
+      previewElement.textContent = 'Failed to generate preview.';
     } finally {
-      // Unlock after cooldown
-      setButtonLoading(false);
-      setTimeout(() => {
-        isUpgrading = false;
-      }, UPGRADE_COOLDOWN);
+      STATE.isProcessing = false;
     }
   }
 
+  function updateScoreViz(scoreObj) {
+    const before = scoreObj.before;
+    const after = scoreObj.after;
+    const delta = after.total - before.total;
+    
+    document.getElementById('promptpro-score-deltas').textContent = `${before.total} → ${after.total} (+${delta})`;
+
+    const ringSegments = document.querySelectorAll('.promptpro-score-ring__segment');
+    const axes = ['clarity', 'specificity', 'structure', 'intent'];
+    
+    axes.forEach((axis, idx) => {
+      // Light up the segment if the dimension score is high (>= 15) or improved
+      const improved = after[axis] > before[axis];
+      const strong = after[axis] >= 15;
+      if (improved || strong) {
+        ringSegments[idx].classList.add('promptpro-score-ring__segment--active');
+        ringSegments[idx].style.background = getAxisColor(axis);
+        ringSegments[idx].style.boxShadow = `0 0 6px ${getAxisColor(axis)}`;
+      } else {
+        ringSegments[idx].classList.remove('promptpro-score-ring__segment--active');
+        ringSegments[idx].style.background = 'rgba(255, 255, 255, 0.08)';
+        ringSegments[idx].style.boxShadow = 'none';
+      }
+    });
+  }
+
+  function getAxisColor(axis) {
+    return {
+      clarity: '#58a6ff',     // blue
+      specificity: '#7ee787', // green
+      structure: '#d2a8ff',   // purple
+      intent: '#ff7b72'       // red
+    }[axis] || '#fff';
+  }
+
   // ═══════════════════════════════════════════════════════════
-  // Main
+  // Observer & Injection Manager
   // ═══════════════════════════════════════════════════════════
+
+  function isInjected() {
+    return !!document.getElementById('promptpro-upgrade-btn');
+  }
+
+  function injectUI(adapter) {
+    if (isInjected()) return;
+
+    const sendButton = adapter.getSendButton();
+    const toolbar = adapter.getToolbar();
+
+    const container = createUIElements(adapter);
+
+    if (sendButton?.parentElement) {
+      sendButton.parentElement.insertBefore(container, sendButton);
+    } else if (toolbar) {
+      toolbar.appendChild(container); // Safe fallback
+    }
+  }
+
+  class ObserverManager {
+    constructor(adapter) {
+      this.adapter = adapter;
+      this.timer = null;
+    }
+    start() {
+      this._attempt();
+      new MutationObserver(() => {
+        if (!isInjected()) {
+          clearTimeout(this.timer);
+          this.timer = setTimeout(() => this._attempt(), 200);
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+    }
+    _attempt() {
+      injectUI(this.adapter);
+    }
+  }
 
   function init() {
     const adapter = resolveAdapter();
-    if (!adapter) {
-      console.log('[PromptPro] Unsupported site');
-      return;
-    }
-
-    console.log(`[PromptPro] Initialized for ${adapter.siteId}`);
-
-    const onUpgrade = (strategy, tone) => handleUpgrade(adapter, strategy, tone);
-
-    const observer = new ObserverManager(adapter, onUpgrade);
-    observer.start();
-
-    window.addEventListener('beforeunload', () => observer.stop());
+    if (!adapter) return;
+    new ObserverManager(adapter).start();
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();
