@@ -40,23 +40,49 @@
 
     <section class="popup__section">
       <h2 class="popup__section-title">Default Tone</h2>
-      <div class="popup__tones" id="tone-selector">
-        <button class="popup__tone popup__tone--active" data-tone="none">None</button>
-        <button class="popup__tone" data-tone="professional">Professional</button>
-        <button class="popup__tone" data-tone="casual">Casual</button>
-        <button class="popup__tone" data-tone="academic">Academic</button>
-        <button class="popup__tone" data-tone="creative">Creative</button>
-        <button class="popup__tone" data-tone="technical">Technical</button>
-        <button class="popup__tone" data-tone="direct">Direct</button>
+      <div class="popup__dropdown" id="tone-selector" tabindex="0">
+        <div class="popup__dropdown-trigger">
+          <span class="popup__dropdown-value" id="tone-display">None</span>
+          <svg class="popup__dropdown-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+        <div class="popup__dropdown-menu">
+          <div class="popup__dropdown-item popup__dropdown-item--active" data-tone="none">
+            <span>None</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <div class="popup__dropdown-item" data-tone="professional">
+            <span>Professional</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <div class="popup__dropdown-item" data-tone="casual">
+            <span>Casual</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <div class="popup__dropdown-item" data-tone="academic">
+            <span>Academic</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <div class="popup__dropdown-item" data-tone="creative">
+            <span>Creative</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <div class="popup__dropdown-item" data-tone="technical">
+            <span>Technical</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <div class="popup__dropdown-item" data-tone="direct">
+            <span>Direct</span><svg class="popup__dropdown-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+        </div>
       </div>
     </section>
 
     <section class="popup__section">
       <h2 class="popup__section-title">Options</h2>
-      <label class="popup__option">
+      <div class="popup__option" id="score-option-container">
         <span>Show score badge</span>
-        <input type="checkbox" id="score-toggle" checked>
-      </label>
+        <label class="popup__switch">
+          <input type="checkbox" id="score-toggle" checked>
+          <span class="popup__switch-border"></span>
+          <span class="popup__switch-track">
+            <span class="popup__switch-thumb"></span>
+          </span>
+        </label>
+      </div>
     </section>
 
     <footer class="popup__footer">

@@ -286,36 +286,66 @@
     toneTitle.className = 'promptpro-section-title';
     toneTitle.textContent = 'Tone tweaks';
     
-    const tonesContainer = document.createElement('div');
-    tonesContainer.className = 'promptpro-tones';
+    const toneDropdown = document.createElement('div');
+    toneDropdown.className = 'promptpro-dropdown';
+    toneDropdown.innerHTML = `
+      <div class="promptpro-dropdown__trigger">
+        <span class="promptpro-dropdown__value">None</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+      <div class="promptpro-dropdown__menu"></div>
+    `;
+    
+    const menu = toneDropdown.querySelector('.promptpro-dropdown__menu');
+    const valueDisplay = toneDropdown.querySelector('.promptpro-dropdown__value');
+    const trigger = toneDropdown.querySelector('.promptpro-dropdown__trigger');
+
     const tones = ['none', 'professional', 'casual', 'academic', 'creative', 'technical', 'direct'];
     tones.forEach(t => {
-      const pill = document.createElement('button');
-      pill.className = `promptpro-tone-pill ${t === 'none' ? 'promptpro-tone-pill--active' : ''}`;
-      pill.textContent = t.charAt(0).toUpperCase() + t.slice(1);
-      pill.dataset.tone = t;
-      pill.addEventListener('click', (e) => {
-        tonesContainer.querySelectorAll('.promptpro-tone-pill').forEach(p => p.classList.remove('promptpro-tone-pill--active'));
-        pill.classList.add('promptpro-tone-pill--active');
+      const item = document.createElement('div');
+      item.className = `promptpro-dropdown__item ${t === 'none' ? 'promptpro-dropdown__item--active' : ''}`;
+      item.innerHTML = `<span>${t.charAt(0).toUpperCase() + t.slice(1)}</span><svg class="promptpro-dropdown__check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+      
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.querySelectorAll('.promptpro-dropdown__item').forEach(p => p.classList.remove('promptpro-dropdown__item--active'));
+        item.classList.add('promptpro-dropdown__item--active');
+        valueDisplay.textContent = item.querySelector('span').textContent;
+        toneDropdown.classList.remove('promptpro-dropdown--open');
+        
         STATE.activeTone = t === 'none' ? null : t;
         refreshPreview(adapter);
       });
-      tonesContainer.appendChild(pill);
+      menu.appendChild(item);
     });
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toneDropdown.classList.toggle('promptpro-dropdown--open');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!toneDropdown.contains(e.target)) {
+        toneDropdown.classList.remove('promptpro-dropdown--open');
+      }
+    }, { capture: true });
+
     toneSection.appendChild(toneTitle);
-    toneSection.appendChild(tonesContainer);
+    toneSection.appendChild(toneDropdown);
 
     const actions = document.createElement('div');
     actions.className = 'promptpro-actions';
     
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'promptpro-action-btn promptpro-action-btn--cancel';
-    cancelBtn.textContent = 'Cancel';
+    cancelBtn.innerHTML = '✕';
+    cancelBtn.title = 'Cancel';
     
     const applyBtn = document.createElement('button');
     applyBtn.id = IDS.APPLY;
     applyBtn.className = 'promptpro-action-btn promptpro-action-btn--apply';
-    applyBtn.textContent = 'Apply';
+    applyBtn.innerHTML = '✓';
+    applyBtn.title = 'Apply';
 
     actions.appendChild(cancelBtn);
     actions.appendChild(applyBtn);

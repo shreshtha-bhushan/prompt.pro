@@ -222,36 +222,87 @@
   margin-bottom: 8px;
 }
 
-.promptpro-tones {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.promptpro-dropdown {
+  position: relative;
+  outline: none;
   margin-bottom: 16px;
 }
-
-.promptpro-tone-pill {
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-  font-weight: 500;
+.promptpro-dropdown__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 150ms ease;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+}
+.promptpro-dropdown:hover .promptpro-dropdown__trigger {
+  background: rgba(255, 255, 255, 0.1);
+}
+.promptpro-dropdown--open .promptpro-dropdown__trigger svg {
+  transform: rotate(180deg);
+}
+.promptpro-dropdown__trigger svg {
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  opacity: 0.5;
 }
 
-.promptpro-tone-pill:hover {
+.promptpro-dropdown__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: rgba(30, 30, 35, 0.95);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 6px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.promptpro-dropdown--open .promptpro-dropdown__menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.promptpro-dropdown__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  transition: background 0.15s, color 0.15s;
+}
+
+.promptpro-dropdown__item:hover {
   background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.15);
   color: rgba(255, 255, 255, 0.9);
 }
-
-.promptpro-tone-pill--active {
-  background: rgba(255, 255, 255, 0.95);
-  color: #000;
-  border-color: transparent;
-  box-shadow: 0 2px 6px rgba(255, 255, 255, 0.2);
+.promptpro-dropdown__check {
+  display: none;
+}
+.promptpro-dropdown__item--active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+.promptpro-dropdown__item--active .promptpro-dropdown__check {
+  display: block;
 }
 
 /* ── Actions (Apply / Cancel) ───────────────────────── */
@@ -259,40 +310,45 @@
 .promptpro-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 12px;
+  margin-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 16px;
 }
-
 .promptpro-action-btn {
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.1);
   border: none;
-  font-family: inherit;
-  transition: all 150ms ease;
 }
-
 .promptpro-action-btn--cancel {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
   color: rgba(255, 255, 255, 0.6);
 }
-
 .promptpro-action-btn--cancel:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 69, 58, 1);
   color: #fff;
+  transform: scale(1.05);
+  box-shadow: 0 0 12px rgba(255, 69, 58, 0.5), 0 0 6px rgba(255, 69, 58, 0.3);
 }
-
 .promptpro-action-btn--apply {
-  background: linear-gradient(135deg, #ffffff, #e2e8f0);
-  color: #0f172a;
-  box-shadow: 0 2px 6px rgba(255, 255, 255, 0.15);
+  background: #fff;
+  color: #000;
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
 }
-
 .promptpro-action-btn--apply:hover {
-  background: #ffffff;
-  transform: scale(1.02);
-  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.25);
+  background: #30d158;
+  color: #fff;
+  transform: scale(1.05) translateY(-1px);
+  box-shadow: 0 0 12px rgba(48, 209, 88, 0.5), 0 0 6px rgba(48, 209, 88, 0.3);
 }
 
 .promptpro-action-btn--apply:active {
@@ -393,23 +449,36 @@
 
   .promptpro-preview__original { color: #000; }
 
-  .promptpro-tone-pill {
+  .promptpro-dropdown__trigger {
+    background: rgba(0, 0, 0, 0.04);
     border-color: rgba(0, 0, 0, 0.08);
-    background: rgba(0, 0, 0, 0.03);
-    color: rgba(0, 0, 0, 0.6);
+    color: #1a1a1e;
   }
-  
-  .promptpro-tone-pill:hover { background: rgba(0, 0, 0, 0.08); color: #000; }
-  .promptpro-tone-pill--active {
-    background: #000;
-    color: #fff;
+  .promptpro-dropdown:hover .promptpro-dropdown__trigger {
+    background: rgba(0, 0, 0, 0.08);
   }
+  .promptpro-dropdown__menu {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(0, 0, 0, 0.1);
+  }
+  .promptpro-dropdown__item { color: rgba(0, 0, 0, 0.6); }
+  .promptpro-dropdown__item:hover { background: rgba(0, 0, 0, 0.06); color: #000; }
+  .promptpro-dropdown__item--active { background: rgba(0, 0, 0, 0.05); color: #000; }
 
   .promptpro-action-btn--cancel { color: rgba(0, 0, 0, 0.6); }
-  .promptpro-action-btn--cancel:hover { background: rgba(0, 0, 0, 0.05); color: #000; }
+  .promptpro-action-btn--cancel:hover { 
+    background: rgba(255, 69, 58, 1); 
+    color: #fff; 
+    box-shadow: 0 0 12px rgba(255, 69, 58, 0.4); 
+  }
   
   .promptpro-action-btn--apply {
     background: linear-gradient(135deg, #1a1a1e, #3a3a40);
     color: #fff;
+  }
+  .promptpro-action-btn--apply:hover {
+    background: #30d158;
+    color: #fff;
+    box-shadow: 0 0 12px rgba(48, 209, 88, 0.4);
   }
 }

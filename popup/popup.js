@@ -36,15 +36,17 @@
       activeStrat.classList.add('popup__strategy--active');
     }
 
-    // Highlight active tone
-    const activeTone = toneSelector.querySelector(
+    // Highlight active tone (Dropdown)
+    const activeToneItem = toneSelector.querySelector(
       `[data-tone="${settings.defaultTone || 'none'}"]`
     );
-    if (activeTone) {
-      toneSelector.querySelectorAll('.popup__tone').forEach(b =>
-        b.classList.remove('popup__tone--active')
+    const toneDisplay = document.getElementById('tone-display');
+    if (activeToneItem && toneDisplay) {
+      toneDisplay.textContent = activeToneItem.querySelector('span').textContent;
+      toneSelector.querySelectorAll('.popup__dropdown-item').forEach(b =>
+        b.classList.remove('popup__dropdown-item--active')
       );
-      activeTone.classList.add('popup__tone--active');
+      activeToneItem.classList.add('popup__dropdown-item--active');
     }
   });
 
@@ -76,14 +78,36 @@
     saveSettings({ defaultStrategy: btn.getAttribute('data-strategy') });
   });
 
+  // Tone Dropdown Logic
+  const toneTrigger = toneSelector.querySelector('.popup__dropdown-trigger');
+  const toneDisplay = document.getElementById('tone-display');
+  
+  toneTrigger?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toneSelector.classList.toggle('popup__dropdown--open');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (toneSelector && !toneSelector.contains(e.target)) {
+      toneSelector.classList.remove('popup__dropdown--open');
+    }
+  });
+
   toneSelector.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-tone]');
-    if (!btn) return;
-    toneSelector.querySelectorAll('.popup__tone').forEach(b =>
-      b.classList.remove('popup__tone--active')
+    const item = e.target.closest('.popup__dropdown-item');
+    if (!item) return;
+    
+    toneSelector.querySelectorAll('.popup__dropdown-item').forEach(b =>
+      b.classList.remove('popup__dropdown-item--active')
     );
-    btn.classList.add('popup__tone--active');
-    const tone = btn.getAttribute('data-tone');
+    item.classList.add('popup__dropdown-item--active');
+    
+    if (toneDisplay) {
+      toneDisplay.textContent = item.querySelector('span').textContent;
+    }
+    toneSelector.classList.remove('popup__dropdown--open');
+    
+    const tone = item.getAttribute('data-tone');
     saveSettings({ defaultTone: tone === 'none' ? null : tone });
   });
 })();
