@@ -273,11 +273,8 @@
       <div class="promptpro-popover__title">Rewrite Preview</div>
       <div class="promptpro-score-container">
         <div class="promptpro-score-deltas" id="promptpro-score-deltas"></div>
-        <div class="promptpro-score-ring" id="${IDS.RINGS}">
-          <div class="promptpro-score-ring__segment" title="Clarity"></div>
-          <div class="promptpro-score-ring__segment" title="Specificity"></div>
-          <div class="promptpro-score-ring__segment" title="Structure"></div>
-          <div class="promptpro-score-ring__segment" title="Intent"></div>
+        <div class="promptpro-score-progress" id="${IDS.RINGS}" role="progressbar" aria-label="Prompt quality score">
+          <div class="promptpro-score-progress__fill"></div>
         </div>
       </div>
     `;
@@ -288,6 +285,7 @@
     preview.textContent = 'Analyzing...';
 
     const toneSection = document.createElement('div');
+    toneSection.className = 'promptpro-tone-section';
     const toneTitle = document.createElement('div');
     toneTitle.className = 'promptpro-section-title';
     toneTitle.textContent = 'Tone tweaks';
@@ -545,35 +543,21 @@
     const before = scoreObj.before;
     const after = scoreObj.after;
     const delta = after.total - before.total;
-    
-    document.getElementById('promptpro-score-deltas').textContent = `${before.total} → ${after.total} (+${delta})`;
 
-    const ringSegments = document.querySelectorAll('.promptpro-score-ring__segment');
-    const axes = ['clarity', 'specificity', 'structure', 'intent'];
-    
-    axes.forEach((axis, idx) => {
-      // Light up the segment if the dimension score is high (>= 15) or improved
-      const improved = after[axis] > before[axis];
-      const strong = after[axis] >= 15;
-      if (improved || strong) {
-        ringSegments[idx].classList.add('promptpro-score-ring__segment--active');
-        ringSegments[idx].style.background = getAxisColor(axis);
-        ringSegments[idx].style.boxShadow = `0 0 6px ${getAxisColor(axis)}`;
-      } else {
-        ringSegments[idx].classList.remove('promptpro-score-ring__segment--active');
-        ringSegments[idx].style.background = 'rgba(255, 255, 255, 0.08)';
-        ringSegments[idx].style.boxShadow = 'none';
-      }
-    });
-  }
+    const deltaText = `${delta >= 0 ? '+' : ''}${delta}`;
+    document.getElementById('promptpro-score-deltas').textContent = `${before.total} → ${after.total} (${deltaText})`;
 
-  function getAxisColor(axis) {
-    return {
-      clarity: '#58a6ff',     // blue
-      specificity: '#7ee787', // green
-      structure: '#d2a8ff',   // purple
-      intent: '#ff7b72'       // red
-    }[axis] || '#fff';
+    // Score engine currently trends around 0-80 (4 axes x 20); clamp defensively for future changes.
+    const maxScore = Math.max(80, before.total, after.total);
+    const percent = Math.max(0, Math.min(100, (after.total / maxScore) * 100));
+    const progress = document.getElementById(IDS.RINGS);
+    const fill = progress?.querySelector('.promptpro-score-progress__fill');
+    if (progress && fill) {
+      fill.style.width = `${percent}%`;
+      progress.setAttribute('aria-valuemin', '0');
+      progress.setAttribute('aria-valuemax', String(maxScore));
+      progress.setAttribute('aria-valuenow', String(after.total));
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
