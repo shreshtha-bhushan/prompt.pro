@@ -251,6 +251,14 @@ const TONE_PRESETS = {
 
   direct(text) {
     return text + '\n\nBe extremely direct. No hedging, no caveats, no filler. State facts and opinions plainly.';
+  },
+
+  humorous(text) {
+    return text + '\n\nUse a light, witty tone with tasteful humor. Keep jokes secondary to clarity.';
+  },
+
+  formal(text) {
+    return text + '\n\nUse a formal register: precise wording, complete sentences, and respectful phrasing.';
   }
 };
 
@@ -534,20 +542,87 @@ const PromptDatabase = {
 
   async saveToLibrary(title, text, tags = []) {
     const db = await this.getDB();
-    db.library.unshift({ id: `lib_${Date.now()}`, title, text, tags });
+    if (!db.library) db.library = [];
+    db.library.unshift({ id: `lib_${Date.now()}`, title: String(title || '').trim() || 'Untitled', text: String(text || ''), tags: Array.isArray(tags) ? tags : [] });
+    await chrome.storage.local.set({ promptDb: db });
+    return db;
+  },
+
+  async deleteLibraryEntry(id) {
+    const db = await this.getDB();
+    if (!db.library) db.library = [];
+    db.library = db.library.filter((e) => e.id !== id);
+    await chrome.storage.local.set({ promptDb: db });
+    return db;
+  },
+
+  async clearHistory() {
+    const db = await this.getDB();
+    db.history = [];
+    await chrome.storage.local.set({ promptDb: db });
+    return db;
+  },
+
+  async addContextBlock(title, content) {
+    const db = await this.getDB();
+    if (!db.contextBlocks) db.contextBlocks = [];
+    db.contextBlocks.push({
+      id: `ctx_${Date.now()}`,
+      title: String(title || '').trim() || 'Context',
+      content: String(content || ''),
+      active: false
+    });
+    await chrome.storage.local.set({ promptDb: db });
+    return db;
+  },
+
+  async deleteContextBlock(id) {
+    const db = await this.getDB();
+    if (!db.contextBlocks) db.contextBlocks = [];
+    db.contextBlocks = db.contextBlocks.filter((b) => b.id !== id);
     await chrome.storage.local.set({ promptDb: db });
     return db;
   }
 };
 
 // ═══════════════════════════════════════════════════════════════
+// UPGRADE RESULT CACHE (LRU, in-memory — no network)
+// ═══════════════════════════════════════════════════════════════
+
+const UPGRADE_CACHE_MAX = 64;
+const upgradeResultCache = new Map();
+
+function upgradeCacheKey(text, strategy, tone) {
+  return `${strategy}\0${tone == null ? '' : String(tone)}\0${text}`;
+}
+
+function cacheUpgradeGet(key) {
+  if (!upgradeResultCache.has(key)) return null;
+  const val = upgradeResultCache.get(key);
+  upgradeResultCache.delete(key);
+  upgradeResultCache.set(key, val);
+  return val;
+}
+
+function cacheUpgradeSet(key, payload) {
+  if (upgradeResultCache.has(key)) upgradeResultCache.delete(key);
+  upgradeResultCache.set(key, payload);
+  while (upgradeResultCache.size > UPGRADE_CACHE_MAX) {
+    const first = upgradeResultCache.keys().next().value;
+    upgradeResultCache.delete(first);
+  }
+}
+
+function isTrustedSender(sender) {
+  return sender.id === chrome.runtime.id;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MESSAGE HANDLER
 // ═══════════════════════════════════════════════════════════════
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-
-  // Only accept messages from our own content scripts
-  if (!sender.tab?.id) {
+  if (!isTrustedSender(sender)) {
     sendResponse({ error: 'Invalid sender' });
     return true;
   }
@@ -555,7 +630,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'UPGRADE_PROMPT') {
     const { text, siteId, strategy = 'enhance', tone = null } = message.payload || {};
 
-    // Validate input
     if (!text || typeof text !== 'string') {
       sendResponse({ error: 'EMPTY', message: 'Please type a prompt first' });
       return true;
@@ -571,33 +645,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
-    // Score before
-    const beforeScore = scorePrompt(text);
-    const analysis = analyzePrompt(text);
-
-    // AI Intelligence: Async Memory & Suggestion Fetch (non-blocking)
-    IntelligenceMemory.updateSession(text);
-    const suggestionsPromise = generateSmartSuggestions(text, analysis);
-
-    // Rewrite
     const rewriteFn = REWRITE_STRATEGIES[strategy];
     if (!rewriteFn) {
       sendResponse({ error: 'UNKNOWN_STRATEGY', message: `Unknown strategy: ${strategy}` });
       return true;
     }
 
-    let rewritten = rewriteFn(text);
+    const cKey = upgradeCacheKey(text, strategy, tone);
+    const cached = cacheUpgradeGet(cKey);
+    if (cached) {
+      sendResponse(cached);
+      return true;
+    }
 
-    // Apply tone preset if specified
+    const beforeScore = scorePrompt(text);
+    const analysis = analyzePrompt(text);
+
+    IntelligenceMemory.updateSession(text);
+    const suggestionsPromise = generateSmartSuggestions(text, analysis);
+
+    let rewritten = rewriteFn(text);
     if (tone && TONE_PRESETS[tone]) {
       rewritten = TONE_PRESETS[tone](rewritten);
     }
-
-    // Score after
     const afterScore = scorePrompt(rewritten);
 
-    suggestionsPromise.then(suggestions => {
-      sendResponse({
+    suggestionsPromise.then((suggestions) => {
+      const payload = {
         rewritten,
         original: text,
         score: {
@@ -608,7 +682,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         strategy,
         tone: tone || null,
         applied: true
-      });
+      };
+      cacheUpgradeSet(cKey, payload);
+      sendResponse(payload);
     });
 
     return true;
@@ -616,10 +692,70 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'REGISTER_ACTION') {
     const { actionType, value } = message.payload || {};
-    if (actionType && value) {
+    if (actionType != null && value != null) {
       IntelligenceMemory.registerAction(actionType, value);
     }
     sendResponse({ success: true });
+    return true;
+  }
+
+  if (message.type === 'GET_DATABASE') {
+    PromptDatabase.getDB().then(sendResponse);
+    return true;
+  }
+
+  if (message.type === 'ADD_HISTORY') {
+    const { text, score } = message.payload || {};
+    PromptDatabase.addHistory(text, score)
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+
+  if (message.type === 'CLEAR_HISTORY') {
+    PromptDatabase.clearHistory()
+      .then((db) => sendResponse({ ok: true, promptDb: db }))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+
+  if (message.type === 'SAVE_LIBRARY_ENTRY') {
+    const { title, text, tags } = message.payload || {};
+    PromptDatabase.saveToLibrary(title, text, tags)
+      .then((db) => sendResponse({ ok: true, promptDb: db }))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+
+  if (message.type === 'DELETE_LIBRARY_ENTRY') {
+    const { id } = message.payload || {};
+    PromptDatabase.deleteLibraryEntry(id)
+      .then((db) => sendResponse({ ok: true, promptDb: db }))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+
+  if (message.type === 'ADD_CONTEXT_BLOCK') {
+    const { title, content } = message.payload || {};
+    PromptDatabase.addContextBlock(title, content)
+      .then((db) => sendResponse({ ok: true, promptDb: db }))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+
+  if (message.type === 'DELETE_CONTEXT_BLOCK') {
+    const { id } = message.payload || {};
+    PromptDatabase.deleteContextBlock(id)
+      .then((db) => sendResponse({ ok: true, promptDb: db }))
+      .catch((e) => sendResponse({ error: e.message }));
+    return true;
+  }
+
+  if (message.type === 'TOGGLE_CONTEXT_BLOCK') {
+    const { id, active } = message.payload || {};
+    PromptDatabase.toggleContextBlock(id, !!active)
+      .then((db) => sendResponse({ ok: true, promptDb: db }))
+      .catch((e) => sendResponse({ error: e.message }));
     return true;
   }
 
@@ -641,6 +777,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+
+  return false;
 });
 
 // ═══════════════════════════════════════════════════════════════

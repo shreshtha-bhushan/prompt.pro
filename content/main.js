@@ -16,7 +16,6 @@
   // ═══════════════════════════════════════════════════════════
 
   const STATE = {
-    isProcessing: false,
     isOpen: false,
     originalText: '',
     currentRewrite: null,
@@ -255,10 +254,17 @@
     SUGGESTIONS: 'promptpro-suggestions-box'
   };
 
+  const INJECT_DEBOUNCE_MS = 120;
+  const PREVIEW_DEBOUNCE_MS = 80;
+  let previewDebounceTimer = null;
+  let previewRequestId = 0;
+
   function createUIElements(adapter) {
     // 1. Anchor Button
     const btn = document.createElement('button');
     btn.id = IDS.BTN;
+    btn.type = 'button';
+    btn.setAttribute('data-promptpro', 'upgrade');
     btn.className = 'promptpro-btn';
     btn.innerHTML = `<span class="promptpro-btn__icon" style="font-size: 15px; filter: grayscale(100%) brightness(200%);">✨</span><span class="promptpro-btn__spinner"></span>`;
     
@@ -318,7 +324,7 @@
         toneDropdown.classList.remove('promptpro-dropdown--open');
         
         STATE.activeTone = t === 'none' ? null : t;
-        refreshPreview(adapter);
+        scheduleRefreshPreview(adapter);
       });
       menu.appendChild(item);
     });
@@ -433,7 +439,9 @@
     popover.classList.add('promptpro-popover--visible');
     btn.classList.add('promptpro-btn--active-lock');
     
-    // Initial fetch
+    clearTimeout(previewDebounceTimer);
+    previewDebounceTimer = null;
+    previewRequestId++;
     refreshPreview(adapter);
   }
 
@@ -445,9 +453,17 @@
     if(btn) btn.classList.remove('promptpro-btn--active-lock');
   }
 
+  function scheduleRefreshPreview(adapter) {
+    clearTimeout(previewDebounceTimer);
+    previewDebounceTimer = setTimeout(() => {
+      previewDebounceTimer = null;
+      previewRequestId++;
+      refreshPreview(adapter);
+    }, PREVIEW_DEBOUNCE_MS);
+  }
+
   async function refreshPreview(adapter) {
-    if (STATE.isProcessing) return;
-    STATE.isProcessing = true;
+    const requestId = previewRequestId;
 
     const previewElement = document.getElementById(IDS.PREVIEW);
     const applyBtn = document.getElementById(IDS.APPLY);
@@ -473,6 +489,8 @@
       // Default to 'enhance' strategy for now inline.
       const result = await requestRewrite(contextPayload, adapter.siteId, 'enhance', finalToneText);
       
+      if (requestId !== previewRequestId) return;
+
       if (result.error) {
         previewElement.innerHTML = `<span style="color:#f85149">Error: ${result.message}</span>`;
         return;
@@ -522,7 +540,7 @@
               
               // Remove the chip
               chip.remove();
-              refreshPreview(adapter);
+              scheduleRefreshPreview(adapter);
             });
             suggestionsBox.appendChild(chip);
           });
@@ -533,9 +551,9 @@
       applyBtn.disabled = false;
       
     } catch (err) {
-      previewElement.textContent = 'Failed to generate preview.';
-    } finally {
-      STATE.isProcessing = false;
+      if (requestId === previewRequestId && previewElement) {
+        previewElement.textContent = 'Failed to generate preview.';
+      }
     }
   }
 
@@ -565,7 +583,7 @@
   // ═══════════════════════════════════════════════════════════
 
   function isInjected() {
-    return !!document.getElementById('promptpro-upgrade-btn');
+    return !!document.getElementById(IDS.BTN);
   }
 
   function injectUI(adapter) {
@@ -579,31 +597,112 @@
     if (sendButton?.parentElement) {
       sendButton.parentElement.insertBefore(container, sendButton);
     } else if (toolbar) {
-      toolbar.appendChild(container); // Safe fallback
+      toolbar.appendChild(container);
     }
   }
 
   class ObserverManager {
     constructor(adapter) {
       this.adapter = adapter;
-      this.timer = null;
+      this.debounceTimer = null;
+      this.bodyObserver = null;
+      this.detachObserver = null;
+      this._onFocusIn = this._onFocusIn.bind(this);
     }
+
     start() {
-      // Pre-fetch DB for <10ms instantaneous Phase 4 UI renders
       chrome.runtime.sendMessage({ type: 'GET_DATABASE' }, (res) => {
         if (!chrome.runtime.lastError && res) STATE.db = res;
       });
 
-      this._attempt();
-      new MutationObserver(() => {
-        if (!isInjected()) {
-          clearTimeout(this.timer);
-          this.timer = setTimeout(() => this._attempt(), 200);
-        }
-      }).observe(document.body, { childList: true, subtree: true });
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local' || !changes.promptDb) return;
+        const next = changes.promptDb.newValue;
+        if (next) STATE.db = next;
+      });
+
+      document.addEventListener('focusin', this._onFocusIn);
+
+      this._attemptInject();
+      this._startBodyObserver();
     }
-    _attempt() {
+
+    _onFocusIn(e) {
+      if (isInjected()) return;
+      const t = e.target;
+      if (t && (t.contentEditable === 'true' || t.tagName === 'TEXTAREA')) {
+        setTimeout(() => this._attemptInject(), 80);
+      }
+    }
+
+    _startBodyObserver() {
+      if (this.bodyObserver) {
+        this.bodyObserver.disconnect();
+        this.bodyObserver = null;
+      }
+
+      this.bodyObserver = new MutationObserver(() => {
+        if (isInjected()) {
+          this._onInjectedStable();
+          return;
+        }
+        this._scheduleReinject();
+      });
+
+      this.bodyObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
+    _onInjectedStable() {
+      if (this.bodyObserver) {
+        this.bodyObserver.disconnect();
+        this.bodyObserver = null;
+      }
+      const container = document.getElementById(IDS.BTN)?.closest('.promptpro-container');
+      if (!container?.parentNode) return;
+      this._attachDetachWatcher(container);
+    }
+
+    _attachDetachWatcher(container) {
+      if (this.detachObserver) {
+        this.detachObserver.disconnect();
+        this.detachObserver = null;
+      }
+      const parent = container.parentNode;
+      if (!parent) return;
+
+      this.detachObserver = new MutationObserver(() => {
+        if (!document.body.contains(container) || !isInjected()) {
+          if (this.detachObserver) {
+            this.detachObserver.disconnect();
+            this.detachObserver = null;
+          }
+          this._startBodyObserver();
+          this._scheduleReinject();
+        }
+      });
+
+      this.detachObserver.observe(parent, { childList: true, subtree: true });
+    }
+
+    _scheduleReinject() {
+      if (isInjected()) {
+        this._onInjectedStable();
+        return;
+      }
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = setTimeout(() => {
+        this.debounceTimer = null;
+        requestAnimationFrame(() => this._attemptInject());
+      }, INJECT_DEBOUNCE_MS);
+    }
+
+    _attemptInject() {
+      if (isInjected()) {
+        this._onInjectedStable();
+        return;
+      }
       injectUI(this.adapter);
+      if (isInjected()) this._onInjectedStable();
     }
   }
 

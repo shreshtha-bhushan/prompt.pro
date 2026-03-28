@@ -1,5 +1,5 @@
 /**
- * PromptPro Popup Script (Phase 5 - Bottom Dock & Glass UI)
+ * PromptPro Popup — settings + History / Library / Context pipelines (chrome.storage.local + service worker)
  */
 (function () {
   'use strict';
@@ -21,51 +21,80 @@
   const toneSelector = document.getElementById('tone-dropdown');
   const toneDisplay = document.getElementById('current-tone');
 
-  // Nav mapping
   const navItems = document.querySelectorAll('.bottom-nav__item');
   const tabPanes = document.querySelectorAll('.popup__tab-pane');
   const bottomNav = document.getElementById('bottom-nav');
   const navGlider = bottomNav?.querySelector('.bottom-nav__glider');
-  
-  // Content areas
+
   const historyContent = document.getElementById('history-content');
   const libraryContent = document.getElementById('library-content');
-  const contextContent = document.getElementById('context-content');
+  const contextList = document.getElementById('context-list');
   const historyClearBtn = document.getElementById('history-clear-btn');
+
+  const libraryTitle = document.getElementById('library-title');
+  const libraryText = document.getElementById('library-text');
+  const libraryTags = document.getElementById('library-tags');
+  const libraryAddBtn = document.getElementById('library-add-btn');
+
+  const contextAddBtn = document.getElementById('context-add-btn');
 
   let promptDb = null;
 
-  // ── Load Settings & DB ────────────────────────────────
-  chrome.storage.local.get(['settings', 'promptDb'], (result) => {
-    const settings = { ...DEFAULT_SETTINGS, ...result.settings };
-    promptDb = result.promptDb || { history: [], library: [], contextBlocks: [] };
+  function sendBackground(type, payload) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({ type, payload }, (res) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (res && res.error) {
+          reject(new Error(res.error));
+          return;
+        }
+        resolve(res);
+      });
+    });
+  }
 
-    // Standard Toggles
-    if(enabledToggle) enabledToggle.checked = settings.enabled !== false;
-    if(scoreToggle) scoreToggle.checked = settings.showScoreBadge !== false;
-    if(noFluffToggle) noFluffToggle.checked = !!settings.noFluff;
-    if(siteMemoryToggle) siteMemoryToggle.checked = settings.siteMemory !== false;
-
-    // Strategy Radio
-    const targetRadio = Array.from(strategyInputs).find(r => r.value === (settings.defaultStrategy || 'enhance'));
-    if (targetRadio) targetRadio.checked = true;
-
-    // Tone Dropdown
-    const activeToneValue = settings.defaultTone || 'professional';
-    const activeToneItem = toneSelector?.querySelector(`[data-value="${activeToneValue}"]`);
-    if (activeToneItem && toneDisplay) {
-      toneDisplay.textContent = activeToneItem.querySelector('span').textContent;
-      toneSelector.querySelectorAll('.popup__dropdown-item').forEach(b => b.classList.remove('popup__dropdown-item--active'));
-      activeToneItem.classList.add('popup__dropdown-item--active');
+  function mergeDb(next) {
+    if (next && typeof next === 'object') {
+      promptDb = next;
     }
+  }
 
-    // Render DB areas
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes.promptDb) return;
+    mergeDb(changes.promptDb.newValue);
     renderTabContent('history');
     renderTabContent('library');
     renderTabContent('context');
   });
 
-  // ── Save Helper ───────────────────────────────────────
+  chrome.storage.local.get(['settings', 'promptDb'], (result) => {
+    const settings = { ...DEFAULT_SETTINGS, ...result.settings };
+    promptDb = result.promptDb || { history: [], library: [], contextBlocks: [], historyLimit: 50 };
+
+    if (enabledToggle) enabledToggle.checked = settings.enabled !== false;
+    if (scoreToggle) scoreToggle.checked = settings.showScoreBadge !== false;
+    if (noFluffToggle) noFluffToggle.checked = !!settings.noFluff;
+    if (siteMemoryToggle) siteMemoryToggle.checked = settings.siteMemory !== false;
+
+    const targetRadio = Array.from(strategyInputs).find((r) => r.value === (settings.defaultStrategy || 'enhance'));
+    if (targetRadio) targetRadio.checked = true;
+
+    const activeToneValue = settings.defaultTone || 'professional';
+    const activeToneItem = toneSelector?.querySelector(`[data-value="${activeToneValue}"]`);
+    if (activeToneItem && toneDisplay) {
+      toneDisplay.textContent = activeToneItem.querySelector('span').textContent;
+      toneSelector.querySelectorAll('.popup__dropdown-item').forEach((b) => b.classList.remove('popup__dropdown-item--active'));
+      activeToneItem.classList.add('popup__dropdown-item--active');
+    }
+
+    renderTabContent('history');
+    renderTabContent('library');
+    renderTabContent('context');
+  });
+
   function saveSettings(updates) {
     chrome.storage.local.get(['settings'], (result) => {
       const settings = { ...DEFAULT_SETTINGS, ...result.settings, ...updates };
@@ -73,7 +102,6 @@
     });
   }
 
-  // ── Nav Dock & Tab Switching ──────────────────────────
   function updateNavGlider(activeItem) {
     if (!navGlider || !activeItem) return;
     const rect = activeItem.getBoundingClientRect();
@@ -82,40 +110,32 @@
     navGlider.style.width = `${rect.width}px`;
   }
 
-  navItems.forEach(item => {
+  navItems.forEach((item) => {
     item.addEventListener('click', () => {
       const targetId = item.getAttribute('data-tab');
 
-      // Update Dock UI
-      navItems.forEach(nav => nav.classList.remove('bottom-nav__item--active'));
+      navItems.forEach((nav) => nav.classList.remove('bottom-nav__item--active'));
       item.classList.add('bottom-nav__item--active');
-      
-      // Update Tabs visibility
-      tabPanes.forEach(pane => {
+
+      tabPanes.forEach((pane) => {
         if (pane.id === `tab-${targetId}`) {
           pane.classList.add('popup__tab-pane--active');
         } else {
           pane.classList.remove('popup__tab-pane--active');
         }
       });
-      
-      // Update Glider (wait for CSS expansion)
-      setTimeout(() => updateNavGlider(item), 150);
 
-      // Lazy render
+      setTimeout(() => updateNavGlider(item), 150);
       renderTabContent(targetId);
     });
   });
 
-  // Initial glider position
   window.addEventListener('load', () => {
     setTimeout(() => {
       const active = document.querySelector('.bottom-nav__item--active');
       if (active) updateNavGlider(active);
     }, 200);
   });
-
-  // ── Form Events ───────────────────────────────────────
 
   enabledToggle?.addEventListener('change', () => {
     saveSettings({ enabled: enabledToggle.checked });
@@ -133,8 +153,7 @@
     saveSettings({ siteMemory: siteMemoryToggle.checked });
   });
 
-  // Liquid Glass radio listeners
-  strategyInputs.forEach(radio => {
+  strategyInputs.forEach((radio) => {
     radio.addEventListener('change', (e) => {
       if (e.target.checked) {
         saveSettings({ defaultStrategy: e.target.value });
@@ -142,16 +161,14 @@
     });
   });
 
-  // Tone Dropdown Logic
   const toneTrigger = toneSelector?.querySelector('.popup__dropdown-trigger');
   const toneMenu = toneSelector?.querySelector('.popup__dropdown-menu');
 
   toneTrigger?.addEventListener('click', (e) => {
     e.stopPropagation();
     const isOpen = toneSelector.classList.toggle('popup__dropdown--open');
-    
+
     if (isOpen && toneMenu) {
-      // Smooth scroll to active item
       const active = toneMenu.querySelector('.popup__dropdown-item--active');
       if (active) {
         active.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -168,95 +185,238 @@
   toneSelector?.addEventListener('click', (e) => {
     const item = e.target.closest('.popup__dropdown-item');
     if (!item) return;
-    
-    toneSelector.querySelectorAll('.popup__dropdown-item').forEach(b =>
+
+    toneSelector.querySelectorAll('.popup__dropdown-item').forEach((b) =>
       b.classList.remove('popup__dropdown-item--active')
     );
     item.classList.add('popup__dropdown-item--active');
-    
+
     if (toneDisplay) toneDisplay.textContent = item.querySelector('span').textContent;
     toneSelector.classList.remove('popup__dropdown--open');
-    
+
     const tone = item.getAttribute('data-value');
     saveSettings({ defaultTone: tone });
   });
 
-  // ── Render DB Logic ───────────────────────────────────
-
-  historyClearBtn?.addEventListener('click', () => {
-    if (promptDb) {
-      promptDb.history = [];
-      chrome.storage.local.set({ promptDb });
+  historyClearBtn?.addEventListener('click', async () => {
+    try {
+      const res = await sendBackground('CLEAR_HISTORY', {});
+      if (res.promptDb) mergeDb(res.promptDb);
       renderTabContent('history');
+    } catch (err) {
+      console.warn('[PromptPro]', err);
+    }
+  });
+
+  libraryAddBtn?.addEventListener('click', async () => {
+    const title = (libraryTitle?.value || '').trim();
+    const text = (libraryText?.value || '').trim();
+    const tagsRaw = (libraryTags?.value || '').trim();
+    if (!text) return;
+
+    const tags = tagsRaw
+      ? tagsRaw.split(',').map((t) => t.trim()).filter(Boolean)
+      : [];
+
+    try {
+      const res = await sendBackground('SAVE_LIBRARY_ENTRY', { title, text, tags });
+      if (res.promptDb) mergeDb(res.promptDb);
+      if (libraryTitle) libraryTitle.value = '';
+      if (libraryText) libraryText.value = '';
+      if (libraryTags) libraryTags.value = '';
+      renderTabContent('library');
+    } catch (err) {
+      console.warn('[PromptPro]', err);
+    }
+  });
+
+  contextAddBtn?.addEventListener('click', async () => {
+    const title = (document.getElementById('context-title')?.value || '').trim();
+    const content = (document.getElementById('context-body')?.value || '').trim();
+    if (!content) return;
+
+    try {
+      const res = await sendBackground('ADD_CONTEXT_BLOCK', { title, content });
+      if (res.promptDb) mergeDb(res.promptDb);
+      const ti = document.getElementById('context-title');
+      const tb = document.getElementById('context-body');
+      if (ti) ti.value = '';
+      if (tb) tb.value = '';
+      renderTabContent('context');
+    } catch (err) {
+      console.warn('[PromptPro]', err);
     }
   });
 
   function renderTabContent(tabId) {
     if (!promptDb) return;
-    
+
     if (tabId === 'history' && historyContent) {
       historyContent.innerHTML = '';
       const history = promptDb.history || [];
       if (history.length === 0) {
-        historyContent.innerHTML = '<div style="color:#86868b;font-size:11px;padding:10px;">No recent upgrades yet.</div>';
+        historyContent.innerHTML =
+          '<div style="color:#86868b;font-size:11px;padding:10px;">No recent upgrades yet.</div>';
         return;
       }
-      history.slice(0, 15).forEach(item => {
+      history.slice(0, 15).forEach((item) => {
         const el = document.createElement('div');
         el.className = 'sidebar__item';
-        
+
         const mins = Math.round((Date.now() - item.timestamp) / 60000);
-        const timeStr = isNaN(mins) ? 'Recently' : (mins < 60 ? `${mins}m ago` : `${Math.floor(mins/60)}h ago`);
-        const pts = item.score ? ` · <span style="color:#30d158;">+${item.score}</span> pts` : '';
-        
-        el.innerHTML = `
-          <div class="sidebar__item-title" style="font-size:11px;color:#86868b;margin-bottom:6px;">${timeStr}${pts}</div>
-          <div class="sidebar__item-text">${item.text}</div>
-        `;
+        const timeStr = Number.isNaN(mins)
+          ? 'Recently'
+          : mins < 60
+            ? `${mins}m ago`
+            : `${Math.floor(mins / 60)}h ago`;
+        const scoreLabel =
+          item.score != null && typeof item.score === 'object' && item.score.total != null
+            ? item.score.total
+            : item.score;
+
+        const meta = document.createElement('div');
+        meta.className = 'sidebar__item-title';
+        meta.style.fontSize = '11px';
+        meta.style.color = '#86868b';
+        meta.style.marginBottom = '6px';
+        meta.textContent =
+          scoreLabel != null ? `${timeStr} · quality ${scoreLabel}` : timeStr;
+
+        const body = document.createElement('div');
+        body.className = 'sidebar__item-text';
+        body.textContent = item.text || '';
+
+        el.appendChild(meta);
+        el.appendChild(body);
         historyContent.appendChild(el);
       });
-    } 
-    else if (tabId === 'library' && libraryContent) {
+    } else if (tabId === 'library' && libraryContent) {
       libraryContent.innerHTML = '';
       const library = promptDb.library || [];
       if (library.length === 0) {
-        libraryContent.innerHTML = '<div style="color:#86868b;font-size:11px;padding:10px;">Your library is empty.</div>';
+        libraryContent.innerHTML =
+          '<div style="color:#86868b;font-size:11px;padding:10px;">Your library is empty.</div>';
         return;
       }
-      library.forEach(item => {
+      library.forEach((item) => {
         const el = document.createElement('div');
         el.className = 'sidebar__item';
-        el.innerHTML = `
-          <div class="sidebar__item-title">${item.title}</div>
-          <div class="sidebar__item-text">${item.text}</div>
-        `;
+
+        const title = document.createElement('div');
+        title.className = 'sidebar__item-title';
+        title.textContent = item.title || 'Untitled';
+
+        const text = document.createElement('div');
+        text.className = 'sidebar__item-text';
+        text.textContent = item.text || '';
+
+        const actions = document.createElement('div');
+        actions.className = 'sidebar__item-actions';
+
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'sidebar__mini-btn';
+        copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          navigator.clipboard.writeText(item.text || '').catch(() => {});
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'sidebar__mini-btn sidebar__mini-btn--danger';
+        delBtn.textContent = 'Delete';
+        delBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            const res = await sendBackground('DELETE_LIBRARY_ENTRY', { id: item.id });
+            if (res.promptDb) mergeDb(res.promptDb);
+            renderTabContent('library');
+          } catch (err) {
+            console.warn('[PromptPro]', err);
+          }
+        });
+
+        actions.appendChild(copyBtn);
+        actions.appendChild(delBtn);
+
+        el.appendChild(title);
+        el.appendChild(text);
+        if (item.tags && item.tags.length) {
+          const tags = document.createElement('div');
+          tags.style.fontSize = '10px';
+          tags.style.color = 'rgba(255,255,255,0.35)';
+          tags.style.marginTop = '6px';
+          tags.textContent = item.tags.join(' · ');
+          el.appendChild(tags);
+        }
+        el.appendChild(actions);
         libraryContent.appendChild(el);
       });
-    }
-    else if (tabId === 'context' && contextContent) {
-      contextContent.innerHTML = '';
+    } else if (tabId === 'context' && contextList) {
+      contextList.innerHTML = '';
       const blocks = promptDb.contextBlocks || [];
       if (blocks.length === 0) {
-        contextContent.innerHTML = '<div style="color:#86868b;font-size:11px;padding:10px;">No context blocks set.</div>';
+        contextList.innerHTML =
+          '<div style="color:#86868b;font-size:11px;padding:10px;">No context blocks. Add reusable context for upgrades.</div>';
         return;
       }
-      blocks.forEach(block => {
+      blocks.forEach((block) => {
         const el = document.createElement('div');
         el.className = `sidebar__item ${block.active ? 'sidebar__context-active' : ''}`;
-        el.innerHTML = `
-          <div class="sidebar__item-title">${block.title}</div>
-          <div class="sidebar__item-text">${block.content}</div>
-        `;
-        
-        el.addEventListener('click', () => {
-          block.active = !block.active;
-          chrome.storage.local.set({ promptDb });
-          el.classList.toggle('sidebar__context-active', block.active);
+
+        const title = document.createElement('div');
+        title.className = 'sidebar__item-title';
+        title.textContent = block.title || 'Context';
+
+        const content = document.createElement('div');
+        content.className = 'sidebar__item-text';
+        content.textContent = block.content || '';
+
+        const actions = document.createElement('div');
+        actions.className = 'sidebar__item-actions';
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.type = 'button';
+        toggleBtn.className = 'sidebar__mini-btn';
+        toggleBtn.textContent = block.active ? 'Active · turn off' : 'Use in upgrades';
+        toggleBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            const res = await sendBackground('TOGGLE_CONTEXT_BLOCK', {
+              id: block.id,
+              active: !block.active
+            });
+            if (res.promptDb) mergeDb(res.promptDb);
+            renderTabContent('context');
+          } catch (err) {
+            console.warn('[PromptPro]', err);
+          }
         });
-        
-        contextContent.appendChild(el);
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'sidebar__mini-btn sidebar__mini-btn--danger';
+        delBtn.textContent = 'Delete';
+        delBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            const res = await sendBackground('DELETE_CONTEXT_BLOCK', { id: block.id });
+            if (res.promptDb) mergeDb(res.promptDb);
+            renderTabContent('context');
+          } catch (err) {
+            console.warn('[PromptPro]', err);
+          }
+        });
+
+        actions.appendChild(toggleBtn);
+        actions.appendChild(delBtn);
+
+        el.appendChild(title);
+        el.appendChild(content);
+        el.appendChild(actions);
+        contextList.appendChild(el);
       });
     }
   }
-
 })();

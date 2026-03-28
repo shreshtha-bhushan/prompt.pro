@@ -158,6 +158,12 @@
         <div class="popup__pane-header">
           <span class="popup__section-title">Prompt Library</span>
         </div>
+        <div class="popup__composer">
+          <input type="text" id="library-title" class="popup__field" placeholder="Title" maxlength="120" autocomplete="off" />
+          <textarea id="library-text" class="popup__field popup__field--textarea" placeholder="Prompt text to save" rows="3"></textarea>
+          <input type="text" id="library-tags" class="popup__field" placeholder="Tags (optional, comma-separated)" autocomplete="off" />
+          <button type="button" class="popup__btn" id="library-add-btn">Save to library</button>
+        </div>
         <div class="popup__scroll-area" id="library-content"></div>
       </div>
 
@@ -166,7 +172,12 @@
         <div class="popup__pane-header">
           <span class="popup__section-title">Context Blocks</span>
         </div>
-        <div class="popup__scroll-area" id="context-content"></div>
+        <div class="popup__composer">
+          <input type="text" id="context-title" class="popup__field" placeholder="Label" maxlength="80" autocomplete="off" />
+          <textarea id="context-body" class="popup__field popup__field--textarea" placeholder="Merged into upgrades when active (local only)" rows="3"></textarea>
+          <button type="button" class="popup__btn" id="context-add-btn">Add block</button>
+        </div>
+        <div class="popup__scroll-area" id="context-list"></div>
       </div>
 
     </div>
