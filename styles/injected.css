@@ -20,6 +20,17 @@
   pointer-events: auto;
 }
 
+/* ChatGPT: stay in normal flow — extreme z-index + isolation caused stacking over the Send control */
+.promptpro-container.promptpro-container--chatgpt {
+  z-index: 3;
+  position: relative;
+  isolation: auto;
+}
+
+.promptpro-container--chatgpt > .promptpro-btn {
+  margin-right: 10px;
+}
+
 /* ── Inline Upgrade Button ──────────────────────────── */
 
 .promptpro-btn {
@@ -131,6 +142,28 @@
   opacity: 1;
   visibility: visible;
   transform: translateY(0) scale(1);
+}
+
+/* Portaled to document.body on ChatGPT — escapes overflow:hidden / transforms on composer */
+.promptpro-popover.promptpro-popover--portal {
+  position: fixed !important;
+  margin: 0;
+  transform: none !important;
+  transform-origin: bottom right;
+  max-height: min(70vh, 520px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.promptpro-popover.promptpro-popover--visible.promptpro-popover--portal {
+  transform: none !important;
+}
+
+.promptpro-popover--portal .promptpro-preview {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: 38vh;
 }
 
 /* ── Popover Header & Score Ring ────────────────────── */

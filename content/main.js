@@ -17,6 +17,7 @@
 
   const STATE = {
     isOpen: false,
+    lastAdapter: null,
     originalText: '',
     currentRewrite: null,
     currentScore: null,
@@ -143,9 +144,99 @@
     get selectors() {
       return {
         input: ['#prompt-textarea', 'div[contenteditable="true"][data-placeholder]', 'textarea[data-id="root"]', 'form textarea'],
-        toolbar: ['#prompt-textarea ~ div', 'form div[class*="flex"][class*="items-end"]', 'form > div > div:last-child', 'form div[class*="justify-between"]'],
-        sendButton: ['button[data-testid="send-button"]', 'button[aria-label="Send prompt"]', 'button[aria-label="Send"]', 'form button[class*="bottom"]:last-of-type']
+        toolbar: [
+          '[data-testid="composer-trailing-actions"]',
+          'form div[class*="flex"][class*="items-end"]',
+          '#prompt-textarea ~ div',
+          'form > div > div:last-child',
+          'form div[class*="justify-between"]'
+        ],
+        sendButton: [
+          'button[data-testid="send-button"]',
+          'button[aria-label="Send prompt"]',
+          'button[aria-label="Send"]',
+          'form button[class*="bottom"]:last-of-type'
+        ]
       };
+    }
+
+    /**
+     * ChatGPT: never prefer insertBefore(send) first — that stacks our control on the Send hit area.
+     * Order: (1) prepend composer-trailing-actions, (2) before voice/mic, (3) send / fallbacks.
+     */
+    findInjectPoint() {
+      const input = this.getInputField();
+      if (!input) return null;
+      const form = input.closest('form');
+      const scope = form || document;
+
+      const trailing = scope.querySelector('[data-testid="composer-trailing-actions"]');
+      if (trailing) {
+        return { parent: trailing, before: trailing.firstChild };
+      }
+
+      const voice =
+        scope.querySelector(
+          'button[data-testid="composer-speech-button"],button[data-testid="composer-mic-button"],button[aria-label*="Voice" i],button[aria-label*="Dictate" i]'
+        ) || shadowQuery(document, 'button[data-testid="composer-speech-button"]');
+      if (voice?.parentElement) {
+        return { parent: voice.parentElement, before: voice };
+      }
+
+      const send =
+        scope.querySelector('button[data-testid="send-button"]') ||
+        shadowQuery(document, 'button[data-testid="send-button"]');
+      if (send?.parentElement) {
+        return { parent: send.parentElement, before: send };
+      }
+
+      const footer = scope.querySelector(
+        '[data-testid="composer-footer"],footer[data-testid="composer-footer"]'
+      );
+      if (footer?.querySelector('button')) {
+        const row = footer.querySelector('div.flex') || footer;
+        const firstBtn = row.querySelector('button');
+        if (firstBtn?.parentElement) {
+          return { parent: firstBtn.parentElement, before: firstBtn };
+        }
+      }
+
+      if (form) {
+        const rows = form.querySelectorAll('div.flex');
+        for (const row of rows) {
+          const plus =
+            row.querySelector(
+              'button[aria-label*="Add" i],button[aria-label*="Attach" i],button[data-testid*="plus" i],button[data-testid="composer-plus-button"]'
+            );
+          if (plus) {
+            const right =
+              row.querySelector('div.flex.items-center.justify-end') ||
+              row.querySelector('div.ml-auto') ||
+              row.lastElementChild;
+            if (right?.querySelector?.('button')) {
+              const anchorBtn = right.querySelector('button');
+              if (anchorBtn?.parentElement) {
+                return { parent: anchorBtn.parentElement, before: anchorBtn };
+              }
+            }
+            if (plus.nextSibling) {
+              return { parent: row, before: plus.nextSibling };
+            }
+          }
+        }
+      }
+
+      let walk = input.parentElement;
+      for (let i = 0; i < 12 && walk; i++) {
+        const sib = walk.nextElementSibling;
+        if (sib?.querySelector?.('button')) {
+          const b = sib.querySelector('button');
+          if (b?.parentElement) return { parent: b.parentElement, before: b };
+        }
+        walk = walk.parentElement;
+      }
+
+      return null;
     }
   }
 
@@ -258,6 +349,76 @@
   const PREVIEW_DEBOUNCE_MS = 80;
   let previewDebounceTimer = null;
   let previewRequestId = 0;
+  let popoverPositionCleanup = null;
+
+  function usePopoverPortal(adapter) {
+    return adapter && adapter.siteId === 'chatgpt';
+  }
+
+  /**
+   * Align popover with the whole trailing-actions strip when present (stable on ChatGPT);
+   * otherwise fall back to the upgrade button rect.
+   */
+  function getChatgptPopoverAnchorRect() {
+    const btn = document.getElementById(IDS.BTN);
+    const trailing = document.querySelector('[data-testid="composer-trailing-actions"]');
+    if (trailing) {
+      const tr = trailing.getBoundingClientRect();
+      if (tr.width > 4 && tr.height > 4) return tr;
+    }
+    if (btn) return btn.getBoundingClientRect();
+    return null;
+  }
+
+  function positionPopoverFixed() {
+    const pop = document.getElementById(IDS.POPOVER);
+    if (!pop) return;
+    const r = getChatgptPopoverAnchorRect();
+    if (!r) return;
+    const popW = Math.min(360, window.innerWidth - 16);
+    let left = r.right - popW;
+    left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
+    const gap = 12;
+    const bottomOffset = window.innerHeight - r.top + gap;
+    pop.style.position = 'fixed';
+    pop.style.left = `${left}px`;
+    pop.style.right = 'auto';
+    pop.style.bottom = `${bottomOffset}px`;
+    pop.style.top = 'auto';
+    pop.style.width = `${popW}px`;
+    pop.style.maxWidth = `${popW}px`;
+    pop.style.zIndex = '2147483647';
+  }
+
+  function attachPopoverPortal(adapter) {
+    if (!usePopoverPortal(adapter)) return;
+    const pop = document.getElementById(IDS.POPOVER);
+    if (!pop) return;
+    document.body.appendChild(pop);
+    pop.classList.add('promptpro-popover--portal');
+    positionPopoverFixed();
+    const onMove = () => positionPopoverFixed();
+    window.addEventListener('scroll', onMove, true);
+    window.addEventListener('resize', onMove);
+    popoverPositionCleanup = () => {
+      window.removeEventListener('scroll', onMove, true);
+      window.removeEventListener('resize', onMove);
+    };
+  }
+
+  function detachPopoverPortal() {
+    if (popoverPositionCleanup) {
+      popoverPositionCleanup();
+      popoverPositionCleanup = null;
+    }
+    const pop = document.getElementById(IDS.POPOVER);
+    const container = document.getElementById(IDS.BTN)?.closest('.promptpro-container');
+    if (pop?.classList.contains('promptpro-popover--portal')) {
+      pop.classList.remove('promptpro-popover--portal');
+      pop.removeAttribute('style');
+      if (container) container.appendChild(pop);
+    }
+  }
 
   function createUIElements(adapter) {
     // 1. Anchor Button
@@ -265,6 +426,8 @@
     btn.id = IDS.BTN;
     btn.type = 'button';
     btn.setAttribute('data-promptpro', 'upgrade');
+    btn.setAttribute('aria-label', 'PromptPro: upgrade prompt');
+    btn.title = 'PromptPro — upgrade prompt';
     btn.className = 'promptpro-btn';
     btn.innerHTML = `<span class="promptpro-btn__icon" style="font-size: 15px; filter: grayscale(100%) brightness(200%);">✨</span><span class="promptpro-btn__spinner"></span>`;
     
@@ -404,9 +567,12 @@
       }
     });
 
-    // Close on outside click
+    // Close on outside click (popover may be portaled to body on ChatGPT)
     document.addEventListener('click', (e) => {
-      if (STATE.isOpen && !container.contains(e.target)) {
+      if (!STATE.isOpen) return;
+      const pop = document.getElementById(IDS.POPOVER);
+      const inPop = pop && pop.contains(e.target);
+      if (!container.contains(e.target) && !inPop) {
         closePopover();
       }
     }, { capture: true });
@@ -433,12 +599,16 @@
 
     STATE.isOpen = true;
     STATE.originalText = text;
-    
+    STATE.lastAdapter = adapter;
+
     const popover = document.getElementById(IDS.POPOVER);
     const btn = document.getElementById(IDS.BTN);
     popover.classList.add('promptpro-popover--visible');
     btn.classList.add('promptpro-btn--active-lock');
-    
+
+    attachPopoverPortal(adapter);
+    requestAnimationFrame(() => positionPopoverFixed());
+
     clearTimeout(previewDebounceTimer);
     previewDebounceTimer = null;
     previewRequestId++;
@@ -447,10 +617,11 @@
 
   function closePopover() {
     STATE.isOpen = false;
+    detachPopoverPortal();
     const popover = document.getElementById(IDS.POPOVER);
     const btn = document.getElementById(IDS.BTN);
-    if(popover) popover.classList.remove('promptpro-popover--visible');
-    if(btn) btn.classList.remove('promptpro-btn--active-lock');
+    if (popover) popover.classList.remove('promptpro-popover--visible');
+    if (btn) btn.classList.remove('promptpro-btn--active-lock');
   }
 
   function scheduleRefreshPreview(adapter) {
@@ -549,7 +720,10 @@
 
       updateScoreViz(result.score);
       applyBtn.disabled = false;
-      
+
+      if (STATE.isOpen && usePopoverPortal(STATE.lastAdapter)) {
+        requestAnimationFrame(() => positionPopoverFixed());
+      }
     } catch (err) {
       if (requestId === previewRequestId && previewElement) {
         previewElement.textContent = 'Failed to generate preview.';
@@ -589,15 +763,57 @@
   function injectUI(adapter) {
     if (isInjected()) return;
 
-    const sendButton = adapter.getSendButton();
-    const toolbar = adapter.getToolbar();
-
     const container = createUIElements(adapter);
+    let placed = false;
 
-    if (sendButton?.parentElement) {
-      sendButton.parentElement.insertBefore(container, sendButton);
-    } else if (toolbar) {
-      toolbar.appendChild(container);
+    if (adapter.siteId === 'chatgpt' && typeof adapter.findInjectPoint === 'function') {
+      const point = adapter.findInjectPoint();
+      if (point?.parent) {
+        if (point.before) point.parent.insertBefore(container, point.before);
+        else point.parent.appendChild(container);
+        placed = true;
+      }
+    }
+
+    if (!placed) {
+      if (adapter.siteId === 'chatgpt') {
+        const trailing = document.querySelector('[data-testid="composer-trailing-actions"]');
+        if (trailing) {
+          trailing.insertBefore(container, trailing.firstChild);
+          placed = true;
+        } else {
+          const voice =
+            document.querySelector(
+              'button[data-testid="composer-speech-button"],button[data-testid="composer-mic-button"],button[aria-label*="Voice" i],button[aria-label*="Dictate" i]'
+            );
+          if (voice?.parentElement) {
+            voice.parentElement.insertBefore(container, voice);
+            placed = true;
+          }
+        }
+      }
+
+      if (!placed) {
+        const sendButton = adapter.getSendButton();
+        const toolbar = adapter.getToolbar();
+
+        if (sendButton?.parentElement) {
+          sendButton.parentElement.insertBefore(container, sendButton);
+        } else if (toolbar) {
+          if (
+            adapter.siteId === 'chatgpt' &&
+            toolbar.getAttribute?.('data-testid') === 'composer-trailing-actions'
+          ) {
+            toolbar.insertBefore(container, toolbar.firstChild);
+          } else {
+            toolbar.appendChild(container);
+          }
+        }
+      }
+    }
+
+    if (adapter.siteId === 'chatgpt') {
+      container.classList.add('promptpro-container--chatgpt');
     }
   }
 
@@ -624,6 +840,13 @@
       document.addEventListener('focusin', this._onFocusIn);
 
       this._attemptInject();
+      if (this.adapter.siteId === 'chatgpt') {
+        [400, 1200, 2800].forEach((ms) => {
+          setTimeout(() => {
+            if (!isInjected()) this._attemptInject();
+          }, ms);
+        });
+      }
       this._startBodyObserver();
     }
 

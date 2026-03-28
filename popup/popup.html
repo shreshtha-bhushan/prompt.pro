@@ -204,6 +204,36 @@
       <div class="bottom-nav__glider"></div>
     </nav>
   </main>
+
+  <!-- Bottom-sheet confirmations (replaces window.confirm); mirrors web/src/components/ui/confirm-drawer.tsx -->
+  <div
+    id="confirm-drawer-root"
+    class="confirm-drawer"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="confirm-drawer-title"
+    aria-describedby="confirm-drawer-desc"
+    aria-hidden="true"
+    inert
+  >
+    <div class="confirm-drawer__backdrop" data-confirm-drawer-dismiss tabindex="-1"></div>
+    <div class="confirm-drawer__panel">
+      <div class="confirm-drawer__handle" aria-hidden="true"></div>
+      <div class="confirm-drawer__body">
+        <h2 id="confirm-drawer-title" class="confirm-drawer__title">PromptPro</h2>
+        <p id="confirm-drawer-desc" class="confirm-drawer__desc"></p>
+      </div>
+      <div class="confirm-drawer__footer">
+        <button type="button" class="confirm-drawer__btn confirm-drawer__btn--outline" id="confirm-drawer-cancel">
+          Cancel
+        </button>
+        <button type="button" class="confirm-drawer__btn confirm-drawer__btn--primary" id="confirm-drawer-ok">
+          OK
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

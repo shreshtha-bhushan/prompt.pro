@@ -40,6 +40,88 @@
 
   let promptDb = null;
 
+  /**
+   * Bottom-sheet confirmation (shadcn/vaul-style UX without React).
+   * For the full React + Tailwind implementation see web/src/components/ui/confirm-drawer.tsx
+   */
+  function showConfirmDrawer(options) {
+    return new Promise((resolve) => {
+      const root = document.getElementById('confirm-drawer-root');
+      const titleEl = document.getElementById('confirm-drawer-title');
+      const descEl = document.getElementById('confirm-drawer-desc');
+      const okBtn = document.getElementById('confirm-drawer-ok');
+      const cancelBtn = document.getElementById('confirm-drawer-cancel');
+      const backdrop = root?.querySelector('[data-confirm-drawer-dismiss]');
+      if (!root || !titleEl || !descEl || !okBtn || !cancelBtn || !backdrop) {
+        resolve(false);
+        return;
+      }
+
+      titleEl.textContent = options.title || 'PromptPro';
+      descEl.textContent = options.description || '';
+      okBtn.textContent = options.confirmLabel || 'OK';
+      cancelBtn.textContent = options.cancelLabel || 'Cancel';
+      okBtn.classList.toggle('confirm-drawer__btn--destructive', !!options.destructive);
+
+      let settled = false;
+      function finish(value) {
+        if (settled) return;
+        settled = true;
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        backdrop.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKey);
+
+        root.classList.remove('confirm-drawer--open');
+
+        const active = document.activeElement;
+        if (active && typeof root.contains === 'function' && root.contains(active)) {
+          active.blur();
+        }
+
+        // Never set aria-hidden while a descendant still has focus (Chrome a11y).
+        requestAnimationFrame(() => {
+          root.setAttribute('aria-hidden', 'true');
+          if ('inert' in root) root.inert = true;
+          else root.setAttribute('inert', '');
+          resolve(value);
+        });
+      }
+
+      function onOk() {
+        finish(true);
+      }
+      function onCancel() {
+        finish(false);
+      }
+      function onBackdrop() {
+        finish(false);
+      }
+      function onKey(e) {
+        if (e.key === 'Escape') finish(false);
+      }
+
+      if ('inert' in root) root.inert = false;
+      else root.removeAttribute('inert');
+      root.setAttribute('aria-hidden', 'false');
+      requestAnimationFrame(() => {
+        root.classList.add('confirm-drawer--open');
+        setTimeout(() => {
+          try {
+            okBtn.focus();
+          } catch (e) {
+            /* ignore */
+          }
+        }, 50);
+      });
+
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      backdrop.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKey);
+    });
+  }
+
   function sendBackground(type, payload) {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({ type, payload }, (res) => {
@@ -199,6 +281,15 @@
   });
 
   historyClearBtn?.addEventListener('click', async () => {
+    const ok = await showConfirmDrawer({
+      title: 'Clear history?',
+      description:
+        'This removes saved upgraded prompts from this device only. This cannot be undone.',
+      confirmLabel: 'Clear',
+      cancelLabel: 'Cancel',
+      destructive: true
+    });
+    if (!ok) return;
     try {
       const res = await sendBackground('CLEAR_HISTORY', {});
       if (res.promptDb) mergeDb(res.promptDb);
@@ -328,6 +419,14 @@
         delBtn.textContent = 'Delete';
         delBtn.addEventListener('click', async (e) => {
           e.stopPropagation();
+          const ok = await showConfirmDrawer({
+            title: 'Delete library entry?',
+            description: 'This removes the saved prompt from your library. This cannot be undone.',
+            confirmLabel: 'Delete',
+            cancelLabel: 'Cancel',
+            destructive: true
+          });
+          if (!ok) return;
           try {
             const res = await sendBackground('DELETE_LIBRARY_ENTRY', { id: item.id });
             if (res.promptDb) mergeDb(res.promptDb);
@@ -400,6 +499,14 @@
         delBtn.textContent = 'Delete';
         delBtn.addEventListener('click', async (e) => {
           e.stopPropagation();
+          const ok = await showConfirmDrawer({
+            title: 'Delete context block?',
+            description: 'It will no longer be merged into upgrades.',
+            confirmLabel: 'Delete',
+            cancelLabel: 'Cancel',
+            destructive: true
+          });
+          if (!ok) return;
           try {
             const res = await sendBackground('DELETE_CONTEXT_BLOCK', { id: block.id });
             if (res.promptDb) mergeDb(res.promptDb);

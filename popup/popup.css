@@ -771,3 +771,147 @@ body {
   border-color: rgba(255, 69, 58, 0.5);
   color: #ff453a;
 }
+
+/* ═══ Bottom confirmation drawer (vaul/shadcn-style, vanilla — MV3 popup cannot bundle React without a build) ═══ */
+
+.confirm-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.confirm-drawer.confirm-drawer--open {
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.confirm-drawer__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.confirm-drawer--open .confirm-drawer__backdrop {
+  opacity: 1;
+}
+
+.confirm-drawer__panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 85%;
+  display: flex;
+  flex-direction: column;
+  /* Glassmorphism — aligned with .bottom-nav dock */
+  background: rgba(20, 20, 24, 0.58);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: none;
+  border-radius: 18px 18px 0 0;
+  box-shadow:
+    0 -12px 48px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(100%);
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  isolation: isolate;
+}
+
+.confirm-drawer--open .confirm-drawer__panel {
+  transform: translateY(0);
+}
+
+.confirm-drawer__handle {
+  width: 100px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  margin: 10px auto 6px;
+  flex-shrink: 0;
+}
+
+.confirm-drawer__body {
+  padding: 8px 18px 16px;
+  text-align: center;
+}
+
+.confirm-drawer__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+
+.confirm-drawer__desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.confirm-drawer__footer {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  padding: 12px 16px 18px;
+  padding-bottom: max(18px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.confirm-drawer__btn {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.confirm-drawer__btn:active {
+  transform: scale(0.98);
+}
+
+.confirm-drawer__btn--outline {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.confirm-drawer__btn--outline:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.confirm-drawer__btn--primary {
+  background: rgba(255, 255, 255, 0.92);
+  color: #000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.confirm-drawer__btn--primary:hover {
+  background: #fff;
+}
+
+.confirm-drawer__btn--primary.confirm-drawer__btn--destructive {
+  background: #ff453a;
+  color: #fff;
+}
+
+.confirm-drawer__btn--primary.confirm-drawer__btn--destructive:hover {
+  background: #ff6960;
+}
