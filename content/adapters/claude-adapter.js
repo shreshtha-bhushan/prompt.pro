@@ -1,4 +1,7 @@
 /**
+ * ⚠️  REFERENCE ONLY — This file is NOT loaded by the manifest.
+ * See content/main.js for the runtime implementation.
+ *
  * Claude Site Adapter
  * Handles DOM interaction for claude.ai
  * 

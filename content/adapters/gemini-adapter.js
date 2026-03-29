@@ -1,4 +1,7 @@
 /**
+ * ⚠️  REFERENCE ONLY — This file is NOT loaded by the manifest.
+ * See content/main.js for the runtime implementation.
+ *
  * Gemini Site Adapter
  * Handles DOM interaction for gemini.google.com
  * 

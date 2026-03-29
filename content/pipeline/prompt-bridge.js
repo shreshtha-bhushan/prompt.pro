@@ -1,4 +1,7 @@
 /**
+ * ⚠️  REFERENCE ONLY — This file is NOT loaded by the manifest.
+ * See content/main.js for the runtime implementation.
+ *
  * Prompt Bridge
  * Handles communication between content script and background service worker.
  * All messages go through chrome.runtime.sendMessage — never external networks.

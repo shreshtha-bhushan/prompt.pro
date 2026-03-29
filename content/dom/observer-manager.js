@@ -1,4 +1,7 @@
 /**
+ * ⚠️  REFERENCE ONLY — This file is NOT loaded by the manifest.
+ * See content/main.js for the runtime implementation.
+ *
  * MutationObserver Manager
  * 
  * Watches for DOM changes caused by React re-renders and SPA navigation.

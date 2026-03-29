@@ -11,13 +11,14 @@
   display: inline-flex;
   align-items: center;
   position: relative;
-  z-index: 2147483000;
+  z-index: 10;
   flex-shrink: 0;
   min-width: 0;
   max-width: 100%;
   overflow: visible;
   isolation: isolate;
   pointer-events: auto;
+  contain: layout style;
 }
 
 /* ChatGPT: stay in normal flow — extreme z-index + isolation caused stacking over the Send control */

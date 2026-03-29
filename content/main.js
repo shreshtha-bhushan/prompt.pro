@@ -1,15 +1,37 @@
 /**
- * PromptPro — Content Script (Phase 2: Apple UI & Popover Flow)
- * 
- * - Apple-style glassmorphic popover injection
- * - "Preview then Apply" interaction state flow
- * - Automatic background diffing/scoring
- * - Tone toggle live refreshing 
- * - Safe target injection on Apply
+ * PromptPro — Content Script (Production-Grade Rewrite)
+ *
+ * Fixes applied:
+ *  1. Persistent body observer — never disconnects; recovers from any DOM mutation
+ *  2. Heuristic button anchoring — orphan cleanup, data-attribute dedup, traversal-based placement
+ *  3. Safe prompt injection — execCommand-first, never innerHTML on contenteditable
+ *  4. Gemini submission guard — isPreviewActive flag, Enter interception, no composed:true
+ *  5. Event listener dedup — global listeners registered once at init, not per injection
+ *  6. SPA navigation detection — pushState/replaceState/popstate hooks
+ *  7. Element cache with isConnected validation
  */
 
 (function () {
   'use strict';
+
+  // ═══════════════════════════════════════════════════════════
+  // Constants
+  // ═══════════════════════════════════════════════════════════
+
+  const IDS = {
+    BTN: 'promptpro-upgrade-btn',
+    POPOVER: 'promptpro-popover',
+    PREVIEW: 'promptpro-preview',
+    APPLY: 'promptpro-apply-btn',
+    RINGS: 'promptpro-score-rings',
+    SUGGESTIONS: 'promptpro-suggestions-box'
+  };
+
+  const DATA_ATTR = 'data-promptpro';
+  const DATA_VALUE = 'upgrade';
+  const INJECT_DEBOUNCE_MS = 120;
+  const PREVIEW_DEBOUNCE_MS = 80;
+  const NAV_SETTLE_MS = 350;
 
   // ═══════════════════════════════════════════════════════════
   // State
@@ -17,13 +39,38 @@
 
   const STATE = {
     isOpen: false,
+    isPreviewActive: false,   // Fix 4: submission guard
     lastAdapter: null,
     originalText: '',
     currentRewrite: null,
     currentScore: null,
     activeTone: 'none',
-    db: null // Pre-fetched <10ms access Library & History
+    db: null,
+    listenersRegistered: false, // Fix 5: register once
+    lastUrl: location.href      // Fix 6: SPA detection
   };
+
+  // ═══════════════════════════════════════════════════════════
+  // Element Cache (Fix 7)
+  // ═══════════════════════════════════════════════════════════
+
+  const _cache = { input: null, toolbar: null, sendButton: null };
+
+  function cachedQuery(adapter, key) {
+    if (_cache[key] && _cache[key].isConnected) return _cache[key];
+    const getter = key === 'input' ? 'getInputField'
+      : key === 'toolbar' ? 'getToolbar'
+      : 'getSendButton';
+    const el = adapter[getter]();
+    _cache[key] = el;
+    return el;
+  }
+
+  function invalidateCache() {
+    _cache.input = null;
+    _cache.toolbar = null;
+    _cache.sendButton = null;
+  }
 
   // ═══════════════════════════════════════════════════════════
   // Shadow DOM Traverser
@@ -33,7 +80,7 @@
     try {
       const direct = root.querySelector?.(selector);
       if (direct) return direct;
-    } catch { /* */ }
+    } catch { /* invalid selector in this context */ }
     return _walk(root, selector);
   }
 
@@ -73,6 +120,11 @@
       return input.tagName === 'TEXTAREA' ? input.value : input.innerText;
     }
 
+    /**
+     * Safe prompt text injection.
+     * Fix 3: execCommand-first strategy that preserves framework state.
+     * Fix 4: Gemini guard — never fire composed:true change events.
+     */
     setPromptText(text) {
       const input = this.getInputField();
       if (!input) return;
@@ -91,39 +143,94 @@
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
       input.focus();
-      input.setSelectionRange(text.length, text.length);
+      try { input.setSelectionRange(text.length, text.length); } catch { /* */ }
     }
 
+    /**
+     * Fix 3: ContentEditable injection — execCommand first, DataTransfer fallback, manual last.
+     * NEVER use innerHTML = '' on ProseMirror editors.
+     */
     _setContentEditable(input, text) {
       input.focus();
+
+      // Strategy 1: execCommand (best — works with ProseMirror undo stack)
       try {
         document.execCommand('selectAll', false, null);
         const success = document.execCommand('insertText', false, text);
         if (success) {
-          const selection = window.getSelection();
-          if (selection) selection.collapseToEnd();
-          input.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: text }));
+          this._finalizeCursor(input);
+          this._dispatchInputEvent(input, text);
           return;
         }
-      } catch {}
+      } catch { /* execCommand not available */ }
 
-      // Fallback
-      input.innerHTML = '';
+      // Strategy 2: InputEvent with dataTransfer (modern replacement for execCommand)
+      try {
+        const selection = window.getSelection();
+        if (selection && input.firstChild) {
+          const range = document.createRange();
+          range.selectNodeContents(input);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+
+        const dt = new DataTransfer();
+        dt.setData('text/plain', text);
+        const beforeInputEvent = new InputEvent('beforeinput', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'insertReplacementText',
+          dataTransfer: dt
+        });
+        const accepted = input.dispatchEvent(beforeInputEvent);
+        if (accepted) {
+          // If the editor handled beforeinput, it will update its own DOM
+          this._dispatchInputEvent(input, text);
+          return;
+        }
+      } catch { /* DataTransfer InputEvent not supported */ }
+
+      // Strategy 3: Manual DOM manipulation (last resort — loses undo stack)
+      // Use textContent instead of innerHTML to avoid ProseMirror desync
       const lines = text.split('\n');
+      input.textContent = '';
       for (const line of lines) {
         const p = document.createElement('p');
-        p.innerHTML = line.trim() === '' ? '<br>' : line;
+        if (line.trim() === '') {
+          p.appendChild(document.createElement('br'));
+        } else {
+          p.textContent = line;
+        }
         input.appendChild(p);
       }
-      const selection = window.getSelection();
-      if (selection && input.lastChild) {
-        const range = document.createRange();
-        range.selectNodeContents(input.lastChild);
-        range.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
-      input.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText' }));
+      this._finalizeCursor(input);
+      this._dispatchInputEvent(input, text);
+    }
+
+    _finalizeCursor(input) {
+      try {
+        const selection = window.getSelection();
+        if (selection && input.lastChild) {
+          const range = document.createRange();
+          range.selectNodeContents(input.lastChild);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      } catch { /* */ }
+    }
+
+    /**
+     * Fix 4: Dispatch input event WITHOUT composed:true.
+     * composed:true was leaking through Gemini's shadow DOM and triggering auto-submit.
+     */
+    _dispatchInputEvent(input, text) {
+      input.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        inputType: 'insertText',
+        data: text
+        // NOTE: composed intentionally omitted — was causing Gemini auto-submit
+      }));
     }
 
     _query(selectorChain) {
@@ -143,7 +250,12 @@
     get siteId() { return 'chatgpt'; }
     get selectors() {
       return {
-        input: ['#prompt-textarea', 'div[contenteditable="true"][data-placeholder]', 'textarea[data-id="root"]', 'form textarea'],
+        input: [
+          '#prompt-textarea',
+          'div[contenteditable="true"][data-placeholder]',
+          'textarea[data-id="root"]',
+          'form textarea'
+        ],
         toolbar: [
           '[data-testid="composer-trailing-actions"]',
           'form div[class*="flex"][class*="items-end"]',
@@ -161,8 +273,8 @@
     }
 
     /**
-     * ChatGPT: never prefer insertBefore(send) first — that stacks our control on the Send hit area.
-     * Order: (1) prepend composer-trailing-actions, (2) before voice/mic, (3) send / fallbacks.
+     * Fix 2: Heuristic injection point finding for ChatGPT.
+     * Ordered strategy: trailing-actions → voice button → send button → form walk.
      */
     findInjectPoint() {
       const input = this.getInputField();
@@ -170,26 +282,31 @@
       const form = input.closest('form');
       const scope = form || document;
 
+      // Strategy 1: Prepend to composer-trailing-actions (most stable)
       const trailing = scope.querySelector('[data-testid="composer-trailing-actions"]');
       if (trailing) {
         return { parent: trailing, before: trailing.firstChild };
       }
 
-      const voice =
-        scope.querySelector(
-          'button[data-testid="composer-speech-button"],button[data-testid="composer-mic-button"],button[aria-label*="Voice" i],button[aria-label*="Dictate" i]'
-        ) || shadowQuery(document, 'button[data-testid="composer-speech-button"]');
+      // Strategy 2: Before voice/mic button
+      const voice = scope.querySelector(
+        'button[data-testid="composer-speech-button"],' +
+        'button[data-testid="composer-mic-button"],' +
+        'button[aria-label*="Voice" i],' +
+        'button[aria-label*="Dictate" i]'
+      ) || shadowQuery(document, 'button[data-testid="composer-speech-button"]');
       if (voice?.parentElement) {
         return { parent: voice.parentElement, before: voice };
       }
 
-      const send =
-        scope.querySelector('button[data-testid="send-button"]') ||
-        shadowQuery(document, 'button[data-testid="send-button"]');
+      // Strategy 3: Before send button
+      const send = scope.querySelector('button[data-testid="send-button"]')
+        || shadowQuery(document, 'button[data-testid="send-button"]');
       if (send?.parentElement) {
         return { parent: send.parentElement, before: send };
       }
 
+      // Strategy 4: Composer footer
       const footer = scope.querySelector(
         '[data-testid="composer-footer"],footer[data-testid="composer-footer"]'
       );
@@ -201,33 +318,9 @@
         }
       }
 
-      if (form) {
-        const rows = form.querySelectorAll('div.flex');
-        for (const row of rows) {
-          const plus =
-            row.querySelector(
-              'button[aria-label*="Add" i],button[aria-label*="Attach" i],button[data-testid*="plus" i],button[data-testid="composer-plus-button"]'
-            );
-          if (plus) {
-            const right =
-              row.querySelector('div.flex.items-center.justify-end') ||
-              row.querySelector('div.ml-auto') ||
-              row.lastElementChild;
-            if (right?.querySelector?.('button')) {
-              const anchorBtn = right.querySelector('button');
-              if (anchorBtn?.parentElement) {
-                return { parent: anchorBtn.parentElement, before: anchorBtn };
-              }
-            }
-            if (plus.nextSibling) {
-              return { parent: row, before: plus.nextSibling };
-            }
-          }
-        }
-      }
-
+      // Strategy 5: Walk up from input, find sibling with buttons
       let walk = input.parentElement;
-      for (let i = 0; i < 12 && walk; i++) {
+      for (let i = 0; i < 8 && walk; i++) {
         const sib = walk.nextElementSibling;
         if (sib?.querySelector?.('button')) {
           const b = sib.querySelector('button');
@@ -270,19 +363,62 @@
     get siteId() { return 'gemini'; }
     get selectors() {
       return {
-        input: ['rich-textarea .ql-editor', 'div[contenteditable="true"][aria-label*="prompt"]'],
-        toolbar: ['.input-area-container .trailing-actions', '.bottom-container div[class*="actions"]'],
-        sendButton: ['button.send-button', 'button[aria-label="Send message"]', 'button[mattooltip="Send"]']
+        input: [
+          'rich-textarea .ql-editor',
+          'div[contenteditable="true"][aria-label*="prompt"]'
+        ],
+        toolbar: [
+          '.input-area-container .trailing-actions',
+          '.bottom-container div[class*="actions"]'
+        ],
+        sendButton: [
+          'button.send-button',
+          'button[aria-label="Send message"]',
+          'button[mattooltip="Send"]'
+        ]
       };
     }
+
     getInputField() {
       const fromChain = this._query(this.selectors.input);
       if (fromChain) return fromChain;
       const richTextarea = document.querySelector('rich-textarea');
       if (richTextarea?.shadowRoot) {
-        return richTextarea.shadowRoot.querySelector('.ql-editor') || richTextarea.shadowRoot.querySelector('[contenteditable="true"]');
+        return richTextarea.shadowRoot.querySelector('.ql-editor')
+          || richTextarea.shadowRoot.querySelector('[contenteditable="true"]');
       }
       return null;
+    }
+
+    /**
+     * Fix 4: Gemini-specific text injection.
+     * Temporarily disable send button during injection to prevent auto-submit.
+     */
+    setPromptText(text) {
+      const input = this.getInputField();
+      if (!input) return;
+
+      // Temporarily disable send button to block auto-submit
+      const sendBtn = this.getSendButton();
+      let wasSendEnabled = false;
+      if (sendBtn) {
+        wasSendEnabled = !sendBtn.disabled;
+        sendBtn.disabled = true;
+        sendBtn.style.pointerEvents = 'none';
+      }
+
+      // Use the base execCommand strategy (never composed:true)
+      this._setContentEditable(input, text);
+
+      // Re-enable send button after events settle
+      if (sendBtn && wasSendEnabled) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            sendBtn.disabled = false;
+            sendBtn.style.pointerEvents = '';
+          });
+        });
+      }
     }
   }
 
@@ -333,20 +469,9 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // UI Generation & Handling
+  // Popover Positioning (ChatGPT portal)
   // ═══════════════════════════════════════════════════════════
 
-  const IDS = {
-    BTN: 'promptpro-upgrade-btn',
-    POPOVER: 'promptpro-popover',
-    PREVIEW: 'promptpro-preview',
-    APPLY: 'promptpro-apply-btn',
-    RINGS: 'promptpro-score-rings',
-    SUGGESTIONS: 'promptpro-suggestions-box'
-  };
-
-  const INJECT_DEBOUNCE_MS = 120;
-  const PREVIEW_DEBOUNCE_MS = 80;
   let previewDebounceTimer = null;
   let previewRequestId = 0;
   let popoverPositionCleanup = null;
@@ -355,10 +480,6 @@
     return adapter && adapter.siteId === 'chatgpt';
   }
 
-  /**
-   * Align popover with the whole trailing-actions strip when present (stable on ChatGPT);
-   * otherwise fall back to the upgrade button rect.
-   */
   function getChatgptPopoverAnchorRect() {
     const btn = document.getElementById(IDS.BTN);
     const trailing = document.querySelector('[data-testid="composer-trailing-actions"]');
@@ -420,17 +541,21 @@
     }
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // UI Generation
+  // ═══════════════════════════════════════════════════════════
+
   function createUIElements(adapter) {
     // 1. Anchor Button
     const btn = document.createElement('button');
     btn.id = IDS.BTN;
     btn.type = 'button';
-    btn.setAttribute('data-promptpro', 'upgrade');
+    btn.setAttribute(DATA_ATTR, DATA_VALUE);
     btn.setAttribute('aria-label', 'PromptPro: upgrade prompt');
     btn.title = 'PromptPro — upgrade prompt';
     btn.className = 'promptpro-btn';
     btn.innerHTML = `<span class="promptpro-btn__icon" style="font-size: 15px; filter: grayscale(100%) brightness(200%);">✨</span><span class="promptpro-btn__spinner"></span>`;
-    
+
     // 2. Popover
     const popover = document.createElement('div');
     popover.id = IDS.POPOVER;
@@ -458,7 +583,7 @@
     const toneTitle = document.createElement('div');
     toneTitle.className = 'promptpro-section-title';
     toneTitle.textContent = 'Tone tweaks';
-    
+
     const toneDropdown = document.createElement('div');
     toneDropdown.className = 'promptpro-dropdown';
     toneDropdown.innerHTML = `
@@ -468,7 +593,7 @@
       </div>
       <div class="promptpro-dropdown__menu"></div>
     `;
-    
+
     const menu = toneDropdown.querySelector('.promptpro-dropdown__menu');
     const valueDisplay = toneDropdown.querySelector('.promptpro-dropdown__value');
     const trigger = toneDropdown.querySelector('.promptpro-dropdown__trigger');
@@ -478,14 +603,14 @@
       const item = document.createElement('div');
       item.className = `promptpro-dropdown__item ${t === 'none' ? 'promptpro-dropdown__item--active' : ''}`;
       item.innerHTML = `<span>${t.charAt(0).toUpperCase() + t.slice(1)}</span><svg class="promptpro-dropdown__check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-      
+
       item.addEventListener('click', (e) => {
         e.stopPropagation();
         menu.querySelectorAll('.promptpro-dropdown__item').forEach(p => p.classList.remove('promptpro-dropdown__item--active'));
         item.classList.add('promptpro-dropdown__item--active');
         valueDisplay.textContent = item.querySelector('span').textContent;
         toneDropdown.classList.remove('promptpro-dropdown--open');
-        
+
         STATE.activeTone = t === 'none' ? null : t;
         scheduleRefreshPreview(adapter);
       });
@@ -497,28 +622,21 @@
       toneDropdown.classList.toggle('promptpro-dropdown--open');
     });
 
-    document.addEventListener('click', (e) => {
-      if (!toneDropdown.contains(e.target)) {
-        toneDropdown.classList.remove('promptpro-dropdown--open');
-      }
-    }, { capture: true });
-
     toneSection.appendChild(toneTitle);
     toneSection.appendChild(toneDropdown);
 
     const suggestionsContainer = document.createElement('div');
     suggestionsContainer.id = IDS.SUGGESTIONS;
     suggestionsContainer.className = 'promptpro-suggestions';
-    // Will be populated by refreshPreview
 
     const actions = document.createElement('div');
     actions.className = 'promptpro-actions';
-    
+
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'promptpro-action-btn promptpro-action-btn--cancel';
     cancelBtn.innerHTML = '✕';
     cancelBtn.title = 'Cancel';
-    
+
     const applyBtn = document.createElement('button');
     applyBtn.id = IDS.APPLY;
     applyBtn.className = 'promptpro-action-btn promptpro-action-btn--apply';
@@ -536,29 +654,31 @@
 
     const container = document.createElement('div');
     container.className = 'promptpro-container';
+    container.setAttribute(DATA_ATTR, 'container');
     container.appendChild(btn);
     container.appendChild(popover);
 
-    // Events
+    // Button click → toggle popover
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       togglePopover(adapter);
     });
 
+    // Cancel → close popover
     cancelBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       closePopover();
     });
 
+    // Apply → inject text (with Gemini submission guard)
     applyBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (STATE.currentRewrite) {
         adapter.setPromptText(STATE.currentRewrite);
         const delta = STATE.currentScore.after.total - STATE.currentScore.before.total;
-        
-        // Add to history async
-        chrome.runtime.sendMessage({ 
-          type: 'ADD_HISTORY', 
+
+        chrome.runtime.sendMessage({
+          type: 'ADD_HISTORY',
           payload: { text: STATE.currentRewrite, score: STATE.currentScore.after.total }
         });
 
@@ -567,20 +687,16 @@
       }
     });
 
-    // Close on outside click (popover may be portaled to body on ChatGPT)
-    document.addEventListener('click', (e) => {
-      if (!STATE.isOpen) return;
-      const pop = document.getElementById(IDS.POPOVER);
-      const inPop = pop && pop.contains(e.target);
-      if (!container.contains(e.target) && !inPop) {
-        closePopover();
-      }
-    }, { capture: true });
+    if (adapter.siteId === 'chatgpt') {
+      container.classList.add('promptpro-container--chatgpt');
+    }
 
     return container;
   }
 
-  // ── Popover Flow State ────────────────────────────────
+  // ═══════════════════════════════════════════════════════════
+  // Popover Flow State
+  // ═══════════════════════════════════════════════════════════
 
   function togglePopover(adapter) {
     if (STATE.isOpen) {
@@ -598,13 +714,14 @@
     }
 
     STATE.isOpen = true;
+    STATE.isPreviewActive = true; // Fix 4: guard
     STATE.originalText = text;
     STATE.lastAdapter = adapter;
 
     const popover = document.getElementById(IDS.POPOVER);
     const btn = document.getElementById(IDS.BTN);
-    popover.classList.add('promptpro-popover--visible');
-    btn.classList.add('promptpro-btn--active-lock');
+    if (popover) popover.classList.add('promptpro-popover--visible');
+    if (btn) btn.classList.add('promptpro-btn--active-lock');
 
     attachPopoverPortal(adapter);
     requestAnimationFrame(() => positionPopoverFixed());
@@ -617,6 +734,7 @@
 
   function closePopover() {
     STATE.isOpen = false;
+    STATE.isPreviewActive = false; // Fix 4: release guard
     detachPopoverPortal();
     const popover = document.getElementById(IDS.POPOVER);
     const btn = document.getElementById(IDS.BTN);
@@ -638,17 +756,17 @@
 
     const previewElement = document.getElementById(IDS.PREVIEW);
     const applyBtn = document.getElementById(IDS.APPLY);
-    const popover = document.getElementById(IDS.POPOVER);
-    
+
+    if (!previewElement || !applyBtn) return;
+
     previewElement.innerHTML = '<div class="promptpro-preview--loading">Analyzing and enhancing...</div>';
     applyBtn.disabled = true;
 
     try {
-      // Apply Tone and Context Blocks pre-processing inline
       let finalToneText = STATE.activeTone;
       let contextPayload = STATE.originalText;
 
-      // Append active context blocks silently to the prompt being upgraded
+      // Append active context blocks
       if (STATE.db && STATE.db.contextBlocks) {
         const activeBlocks = STATE.db.contextBlocks.filter(b => b.active);
         if (activeBlocks.length > 0) {
@@ -657,9 +775,9 @@
         }
       }
 
-      // Default to 'enhance' strategy for now inline.
       const result = await requestRewrite(contextPayload, adapter.siteId, 'enhance', finalToneText);
-      
+
+      // Stale check
       if (requestId !== previewRequestId) return;
 
       if (result.error) {
@@ -670,27 +788,22 @@
       STATE.currentRewrite = result.rewritten;
       STATE.currentScore = result.score;
 
-      // Smart Highlight Diff
-      // To highlight additions without a huge diff library, we attempt to split or wrap the original text payload.
-      // Since our rewriter often encapsulates the original text, we can do a simple string replacement.
-      // We encode HTML entities to be safe.
+      // Diff highlight
       const escapeHtml = (unsafe) => unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      
+
       let safeOriginal = escapeHtml(STATE.originalText);
       let safeRewritten = escapeHtml(result.rewritten);
 
       if (safeRewritten.includes(safeOriginal) && safeOriginal.length > 0) {
-        // Highlighting trick: wrap everything, then unwrap the exact original string
         const parts = safeRewritten.split(safeOriginal);
-        previewElement.innerHTML = parts.map(p => 
+        previewElement.innerHTML = parts.map(p =>
           p ? `<span class="promptpro-preview__addition">${p}</span>` : ''
         ).join(`<span class="promptpro-preview__original">${safeOriginal}</span>`);
       } else {
-        // Fallback: just show all as addition if deeply modified
         previewElement.innerHTML = `<span class="promptpro-preview__addition">${safeRewritten}</span>`;
       }
 
-      // Populate AI Smart Suggestions
+      // Smart suggestions
       const suggestionsBox = document.getElementById(IDS.SUGGESTIONS);
       if (suggestionsBox) {
         suggestionsBox.innerHTML = '';
@@ -700,16 +813,11 @@
             chip.className = 'promptpro-suggestion-chip';
             chip.textContent = sug.text;
             chip.title = `Apply ${sug.type} hint`;
-            
+
             chip.addEventListener('click', (e) => {
               e.stopPropagation();
-              // RUA Loop: Register acceptance
               registerAction('suggestion_click', sug.id);
-              
-              // Append to original prompt context cleanly without modifying user's visible input box yet
               STATE.originalText = STATE.originalText.trim() + `\n\n[Requirement: ${sug.text}]`;
-              
-              // Remove the chip
               chip.remove();
               scheduleRefreshPreview(adapter);
             });
@@ -737,9 +845,9 @@
     const delta = after.total - before.total;
 
     const deltaText = `${delta >= 0 ? '+' : ''}${delta}`;
-    document.getElementById('promptpro-score-deltas').textContent = `${before.total} → ${after.total} (${deltaText})`;
+    const deltasEl = document.getElementById('promptpro-score-deltas');
+    if (deltasEl) deltasEl.textContent = `${before.total} → ${after.total} (${deltaText})`;
 
-    // Score engine currently trends around 0-80 (4 axes x 20); clamp defensively for future changes.
     const maxScore = Math.max(80, before.total, after.total);
     const percent = Math.max(0, Math.min(100, (after.total / maxScore) * 100));
     const progress = document.getElementById(IDS.RINGS);
@@ -753,19 +861,41 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // Observer & Injection Manager
+  // Fix 2: Button Injection with Orphan Cleanup
   // ═══════════════════════════════════════════════════════════
 
   function isInjected() {
-    return !!document.getElementById(IDS.BTN);
+    const btn = document.getElementById(IDS.BTN);
+    return btn && btn.isConnected;
+  }
+
+  /**
+   * Remove orphaned PromptPro elements (duplicates, detached containers).
+   */
+  function cleanupOrphans() {
+    const all = document.querySelectorAll(`[${DATA_ATTR}="${DATA_VALUE}"]`);
+    if (all.length <= 1) return;
+    // Keep the first connected one, remove the rest
+    let kept = false;
+    all.forEach(el => {
+      const container = el.closest('.promptpro-container') || el;
+      if (!kept && container.isConnected) {
+        kept = true;
+      } else {
+        container.remove();
+      }
+    });
   }
 
   function injectUI(adapter) {
+    // Clean orphans before checking
+    cleanupOrphans();
     if (isInjected()) return;
 
     const container = createUIElements(adapter);
     let placed = false;
 
+    // ── ChatGPT: use findInjectPoint ──
     if (adapter.siteId === 'chatgpt' && typeof adapter.findInjectPoint === 'function') {
       const point = adapter.findInjectPoint();
       if (point?.parent) {
@@ -775,58 +905,68 @@
       }
     }
 
-    if (!placed) {
-      if (adapter.siteId === 'chatgpt') {
-        const trailing = document.querySelector('[data-testid="composer-trailing-actions"]');
-        if (trailing) {
-          trailing.insertBefore(container, trailing.firstChild);
+    // ── ChatGPT fallbacks ──
+    if (!placed && adapter.siteId === 'chatgpt') {
+      const trailing = document.querySelector('[data-testid="composer-trailing-actions"]');
+      if (trailing) {
+        trailing.insertBefore(container, trailing.firstChild);
+        placed = true;
+      } else {
+        const voice = document.querySelector(
+          'button[data-testid="composer-speech-button"],' +
+          'button[data-testid="composer-mic-button"],' +
+          'button[aria-label*="Voice" i],' +
+          'button[aria-label*="Dictate" i]'
+        );
+        if (voice?.parentElement) {
+          voice.parentElement.insertBefore(container, voice);
           placed = true;
-        } else {
-          const voice =
-            document.querySelector(
-              'button[data-testid="composer-speech-button"],button[data-testid="composer-mic-button"],button[aria-label*="Voice" i],button[aria-label*="Dictate" i]'
-            );
-          if (voice?.parentElement) {
-            voice.parentElement.insertBefore(container, voice);
-            placed = true;
-          }
-        }
-      }
-
-      if (!placed) {
-        const sendButton = adapter.getSendButton();
-        const toolbar = adapter.getToolbar();
-
-        if (sendButton?.parentElement) {
-          sendButton.parentElement.insertBefore(container, sendButton);
-        } else if (toolbar) {
-          if (
-            adapter.siteId === 'chatgpt' &&
-            toolbar.getAttribute?.('data-testid') === 'composer-trailing-actions'
-          ) {
-            toolbar.insertBefore(container, toolbar.firstChild);
-          } else {
-            toolbar.appendChild(container);
-          }
         }
       }
     }
 
-    if (adapter.siteId === 'chatgpt') {
+    // ── Generic: anchor to send button or toolbar ──
+    if (!placed) {
+      const sendButton = adapter.getSendButton();
+      const toolbar = adapter.getToolbar();
+
+      if (sendButton?.parentElement) {
+        sendButton.parentElement.insertBefore(container, sendButton);
+        placed = true;
+      } else if (toolbar) {
+        if (
+          adapter.siteId === 'chatgpt' &&
+          toolbar.getAttribute?.('data-testid') === 'composer-trailing-actions'
+        ) {
+          toolbar.insertBefore(container, toolbar.firstChild);
+        } else {
+          toolbar.appendChild(container);
+        }
+        placed = true;
+      }
+    }
+
+    // If placed, apply ChatGPT class
+    if (placed && adapter.siteId === 'chatgpt') {
       container.classList.add('promptpro-container--chatgpt');
     }
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // Fix 1: Observer Engine — Persistent, Never-Disconnect
+  // ═══════════════════════════════════════════════════════════
 
   class ObserverManager {
     constructor(adapter) {
       this.adapter = adapter;
       this.debounceTimer = null;
       this.bodyObserver = null;
-      this.detachObserver = null;
+      this._rafId = null;
       this._onFocusIn = this._onFocusIn.bind(this);
     }
 
     start() {
+      // Load database
       chrome.runtime.sendMessage({ type: 'GET_DATABASE' }, (res) => {
         if (!chrome.runtime.lastError && res) STATE.db = res;
       });
@@ -837,17 +977,70 @@
         if (next) STATE.db = next;
       });
 
-      document.addEventListener('focusin', this._onFocusIn);
+      // Fix 5: Register global listeners ONCE
+      this._registerGlobalListeners();
 
+      // Initial injection
       this._attemptInject();
+
+      // ChatGPT: extra retry with exponential backoff
       if (this.adapter.siteId === 'chatgpt') {
-        [400, 1200, 2800].forEach((ms) => {
+        [300, 800, 2000, 4000].forEach((ms) => {
           setTimeout(() => {
             if (!isInjected()) this._attemptInject();
           }, ms);
         });
       }
+
+      // Fix 1: Start persistent body observer — NEVER disconnected
       this._startBodyObserver();
+
+      // Fix 6: SPA navigation detection
+      this._watchNavigation();
+
+      // Focus backup
+      document.addEventListener('focusin', this._onFocusIn);
+    }
+
+    /**
+     * Fix 5: Global event listeners registered exactly once.
+     * Handles: outside click to close popover, outside click to close tone dropdown,
+     * and Enter key interception for Gemini submission guard.
+     */
+    _registerGlobalListeners() {
+      if (STATE.listenersRegistered) return;
+      STATE.listenersRegistered = true;
+
+      // Outside click → close popover
+      document.addEventListener('click', (e) => {
+        if (!STATE.isOpen) return;
+        const pop = document.getElementById(IDS.POPOVER);
+        const container = document.getElementById(IDS.BTN)?.closest('.promptpro-container');
+        const inPop = pop && pop.contains(e.target);
+        const inContainer = container && container.contains(e.target);
+        if (!inPop && !inContainer) {
+          closePopover();
+        }
+      }, { capture: true });
+
+      // Outside click → close tone dropdown
+      document.addEventListener('click', (e) => {
+        const dropdown = document.querySelector('.promptpro-dropdown--open');
+        if (dropdown && !dropdown.contains(e.target)) {
+          dropdown.classList.remove('promptpro-dropdown--open');
+        }
+      }, { capture: true });
+
+      // Fix 4: Enter key interception while preview is active
+      document.addEventListener('keydown', (e) => {
+        if (!STATE.isPreviewActive) return;
+        if (e.key === 'Enter' && !e.shiftKey) {
+          // Block Enter from submitting on any platform while popover is open
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+        }
+      }, { capture: true });
     }
 
     _onFocusIn(e) {
@@ -858,76 +1051,101 @@
       }
     }
 
+    /**
+     * Fix 1: Persistent body observer.
+     * NEVER disconnects. Checks if button is still connected on every mutation batch.
+     * Debounced + RAF coalesced for performance.
+     */
     _startBodyObserver() {
-      if (this.bodyObserver) {
-        this.bodyObserver.disconnect();
-        this.bodyObserver = null;
-      }
+      if (this.bodyObserver) return; // already running
 
       this.bodyObserver = new MutationObserver(() => {
-        if (isInjected()) {
-          this._onInjectedStable();
-          return;
-        }
+        // Fast path: button exists AND is connected to DOM
+        const btn = document.getElementById(IDS.BTN);
+        if (btn && btn.isConnected) return;
+
+        // Button gone — schedule reinject
         this._scheduleReinject();
       });
 
-      this.bodyObserver.observe(document.body, { childList: true, subtree: true });
-    }
-
-    _onInjectedStable() {
-      if (this.bodyObserver) {
-        this.bodyObserver.disconnect();
-        this.bodyObserver = null;
-      }
-      const container = document.getElementById(IDS.BTN)?.closest('.promptpro-container');
-      if (!container?.parentNode) return;
-      this._attachDetachWatcher(container);
-    }
-
-    _attachDetachWatcher(container) {
-      if (this.detachObserver) {
-        this.detachObserver.disconnect();
-        this.detachObserver = null;
-      }
-      const parent = container.parentNode;
-      if (!parent) return;
-
-      this.detachObserver = new MutationObserver(() => {
-        if (!document.body.contains(container) || !isInjected()) {
-          if (this.detachObserver) {
-            this.detachObserver.disconnect();
-            this.detachObserver = null;
-          }
-          this._startBodyObserver();
-          this._scheduleReinject();
-        }
+      this.bodyObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+        // No attributes/characterData — only structural changes
       });
+    }
 
-      this.detachObserver.observe(parent, { childList: true, subtree: true });
+    /**
+     * Fix 6: SPA navigation detection.
+     * Hooks pushState, replaceState, popstate to detect client-side navigation.
+     */
+    _watchNavigation() {
+      const self = this;
+
+      const onNavigate = () => {
+        const newUrl = location.href;
+        if (newUrl === STATE.lastUrl) return;
+        STATE.lastUrl = newUrl;
+
+        // Close popover if open
+        if (STATE.isOpen) closePopover();
+
+        // Invalidate element cache
+        invalidateCache();
+
+        // Remove old button and reinject after DOM settles
+        setTimeout(() => {
+          const oldContainer = document.querySelector('.promptpro-container');
+          if (oldContainer) oldContainer.remove();
+          self._attemptInject();
+        }, NAV_SETTLE_MS);
+      };
+
+      // Hook pushState
+      const origPush = history.pushState;
+      history.pushState = function (...args) {
+        origPush.apply(this, args);
+        onNavigate();
+      };
+
+      // Hook replaceState
+      const origReplace = history.replaceState;
+      history.replaceState = function (...args) {
+        origReplace.apply(this, args);
+        onNavigate();
+      };
+
+      // Back/forward
+      window.addEventListener('popstate', onNavigate);
     }
 
     _scheduleReinject() {
-      if (isInjected()) {
-        this._onInjectedStable();
-        return;
-      }
+      if (isInjected()) return;
       clearTimeout(this.debounceTimer);
+      if (this._rafId) cancelAnimationFrame(this._rafId);
+
       this.debounceTimer = setTimeout(() => {
         this.debounceTimer = null;
-        requestAnimationFrame(() => this._attemptInject());
+        this._rafId = requestAnimationFrame(() => {
+          this._rafId = null;
+          this._attemptInject();
+        });
       }, INJECT_DEBOUNCE_MS);
     }
 
     _attemptInject() {
-      if (isInjected()) {
-        this._onInjectedStable();
-        return;
+      if (isInjected()) return;
+      try {
+        injectUI(this.adapter);
+      } catch (err) {
+        // Injection failed — observer will retry on next DOM mutation
       }
-      injectUI(this.adapter);
-      if (isInjected()) this._onInjectedStable();
     }
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // Init
+  // ═══════════════════════════════════════════════════════════
 
   function init() {
     const adapter = resolveAdapter();

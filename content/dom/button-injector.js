@@ -1,4 +1,7 @@
 /**
+ * ⚠️  REFERENCE ONLY — This file is NOT loaded by the manifest.
+ * See content/main.js for the runtime implementation.
+ *
  * Button Injector
  * Injects the PromptPro "✨ Upgrade" button into the AI chat toolbar.
  * 

@@ -1,4 +1,7 @@
 /**
+ * ⚠️  REFERENCE ONLY — This file is NOT loaded by the manifest.
+ * See content/main.js for the runtime implementation.
+ *
  * Shadow DOM Traversal Utility
  * Recursively walks shadow roots to query elements across shadow boundaries.
  * Required for Gemini (Web Components) and future Shadow DOM usage.

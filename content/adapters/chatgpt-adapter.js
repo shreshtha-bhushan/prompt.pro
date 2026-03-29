@@ -1,4 +1,7 @@
 /**
+ * ⚠️  REFERENCE ONLY — This file is NOT loaded by the manifest.
+ * See content/main.js for the runtime implementation.
+ *
  * ChatGPT Site Adapter
  * Handles DOM interaction for chat.openai.com and chatgpt.com
  * 

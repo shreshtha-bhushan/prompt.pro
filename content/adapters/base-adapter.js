@@ -1,4 +1,9 @@
 /**
+ * ⚠️  REFERENCE ONLY — This file is NOT loaded by the manifest.
+ * The manifest loads content/main.js (a self-contained IIFE) which contains
+ * its own inline copy of all adapters. Edits here have NO runtime effect.
+ * Chrome MV3 content_scripts do not support ES module imports.
+ *
  * BaseSiteAdapter — Abstract interface for site-specific DOM interaction.
  * 
  * Each AI chat site (ChatGPT, Claude, Gemini) has its own adapter that
