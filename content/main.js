@@ -554,7 +554,7 @@
     btn.setAttribute('aria-label', 'PromptPro: upgrade prompt');
     btn.title = 'PromptPro — upgrade prompt';
     btn.className = 'promptpro-btn';
-    btn.innerHTML = `<span class="promptpro-btn__icon" style="font-size: 15px; filter: grayscale(100%) brightness(200%);">✨</span><span class="promptpro-btn__spinner"></span>`;
+    btn.innerHTML = `<span class="promptpro-btn__icon">✨</span><span class="promptpro-btn__spinner"></span>`;
 
     // 2. Popover
     const popover = document.createElement('div');
