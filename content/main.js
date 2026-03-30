@@ -365,23 +365,30 @@
       return {
         input: [
           'rich-textarea .ql-editor',
-          'div[contenteditable="true"][aria-label*="prompt"]'
+          'div.ql-editor[contenteditable="true"]',
+          'div[contenteditable="true"][aria-label*="prompt" i]',
+          'div[contenteditable="true"][aria-label*="Gemini" i]'
         ],
         toolbar: [
+          '.input-area-container',
           '.input-area-container .trailing-actions',
           '.bottom-container div[class*="actions"]'
         ],
         sendButton: [
           'button.send-button',
           'button[aria-label="Send message"]',
+          'button.submit',
           'button[mattooltip="Send"]'
         ]
       };
     }
 
     getInputField() {
+      // Try standard selectors first (works when no shadow DOM)
       const fromChain = this._query(this.selectors.input);
       if (fromChain) return fromChain;
+
+      // Fallback: traverse shadow DOM if Gemini re-enables it
       const richTextarea = document.querySelector('rich-textarea');
       if (richTextarea?.shadowRoot) {
         return richTextarea.shadowRoot.querySelector('.ql-editor')
@@ -477,11 +484,13 @@
   let popoverPositionCleanup = null;
 
   function usePopoverPortal(adapter) {
-    return adapter && adapter.siteId === 'chatgpt';
+    // Portal to body on all platforms to avoid overflow:hidden clipping
+    return !!adapter;
   }
 
-  function getChatgptPopoverAnchorRect() {
+  function getPopoverAnchorRect() {
     const btn = document.getElementById(IDS.BTN);
+    // ChatGPT-specific: prefer the trailing-actions container for stable anchor
     const trailing = document.querySelector('[data-testid="composer-trailing-actions"]');
     if (trailing) {
       const tr = trailing.getBoundingClientRect();
@@ -494,7 +503,7 @@
   function positionPopoverFixed() {
     const pop = document.getElementById(IDS.POPOVER);
     if (!pop) return;
-    const r = getChatgptPopoverAnchorRect();
+    const r = getPopoverAnchorRect();
     if (!r) return;
     const popW = Math.min(360, window.innerWidth - 16);
     let left = r.right - popW;
@@ -983,8 +992,8 @@
       // Initial injection
       this._attemptInject();
 
-      // ChatGPT: extra retry with exponential backoff
-      if (this.adapter.siteId === 'chatgpt') {
+      // ChatGPT & Gemini: extra retry with exponential backoff
+      if (this.adapter.siteId === 'chatgpt' || this.adapter.siteId === 'gemini') {
         [300, 800, 2000, 4000].forEach((ms) => {
           setTimeout(() => {
             if (!isInjected()) this._attemptInject();
