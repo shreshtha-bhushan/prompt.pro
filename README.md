@@ -1,13 +1,15 @@
 <div align="center">
 
-<img src="./assets/hero_banner.png" alt="PromptPro Hero Banner" width="100%" />
+<img src="./images/home.png" alt="PromptPro Hero Banner" width="100%" />
 
 # PromptPro ✦ Upgrade your prompts. Everywhere.
 The first native prompt optimization layer that lives inside AI tools—right where you type.
 
-[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?style=flat-square&logo=google-chrome&logoColor=white)](https://chrome.google.com/webstore/)
+[![Website](https://img.shields.io/badge/Website-PromptPro-8B5CF6?style=flat-square&logo=vercel&logoColor=white)](https://promptpro-beta.vercel.app/)
+[![Get for Chrome](https://img.shields.io/badge/Chrome-Extension-4285F4?style=flat-square&logo=google-chrome&logoColor=white)](https://promptpro-beta.vercel.app/#install)
 [![100% Local](https://img.shields.io/badge/Privacy-100%25_Local-34D399?style=flat-square&logo=privacyguides&logoColor=white)](#local-first--secure)
-[![Version](https://img.shields.io/badge/Version-1.0.0-8B5CF6?style=flat-square)](#)
+
+[**Visit Landing Page →**](https://promptpro-beta.vercel.app/) | [**Get for Chrome →**](https://promptpro-beta.vercel.app/#install)
 
 </div>
 
@@ -19,6 +21,10 @@ PromptPro is a lightweight, local-first Chrome Extension that upgrades your prom
 
 ## 💎 Features at a Glance
 
+<div align="center">
+  <img src="./images/features.png" alt="PromptPro Features" width="900px" style="border-radius:12px; border:1px solid rgba(255,255,255,0.1)"/>
+</div>
+
 *   **Inline UX Integration**: Injects a sleek "✨ Upgrade" button directly beside the native send button in your favorite AI chat platforms.
 *   **Apple-Inspired Aesthetics**: Experience state-of-the-art glassmorphic UI, fluid momentum animations, sweep glows, and a beautiful monotone mesh-gradient popup.
 *   **Intelligent Strategies**: Leverage contextually smart strategies like **Enhance** 🚀, **Elaborate** 📝, and **Concise** ⚡ to structure prompts mathematically, optimizing for the best AI inference results.
@@ -27,20 +33,20 @@ PromptPro is a lightweight, local-first Chrome Extension that upgrades your prom
 
 ---
 
-## 📐 Unified Interception Architecture
+## 📐 See it in action 
 
 <div align="center">
-  <img src="./assets/architecture_flow.png" alt="Local Architecture Flow" width="900px" style="border-radius:12px; border:1px solid rgba(255,255,255,0.1)"/>
+  <img src="./images/demo.png" alt="See it in action" width="900px" style="border-radius:12px; border:1px solid rgba(255,255,255,0.1)"/>
 </div>
 
-PromptPro uses a monolithic, zero-friction DOM interception strategy (`main.js`) to anchor securely onto React/Angular frameworks without corrupting them. The injected UI feels like a native part of the web app, but operates strictly inside the isolated extension boundary.
+PromptPro uses a monolithic, zero-friction DOM interception strategy to anchor securely onto React/Angular frameworks without corrupting them. The injected UI feels like a native part of the web app, but operates strictly inside the isolated extension boundary.
 
 ---
 
 ## 🎨 Premium Configuration Popup
 
 <div align="center">
-  <img src="./assets/popup_showcase.png" alt="PromptPro Popup Configuration UI" width="600" style="border-radius:12px; box-shadow: 0 10px 40px rgba(0,0,0,0.5)"/>
+  <img src="./images/product.png" alt="PromptPro Popup Configuration UI" width="600" style="border-radius:12px; box-shadow: 0 10px 40px rgba(0,0,0,0.5)"/>
 </div>
 
 ### Total Control. Instantly Accessible.
@@ -52,11 +58,18 @@ Click the PromptPro extension icon in your toolbar to unlock advanced prompt set
 
 ---
 
-## 🛠 Complete Installation Steps
+## 🛠 Installation
+
+<div align="center">
+  <img src="./images/install.png" alt="Install PromptPro" width="800px" style="border-radius:12px; border:1px solid rgba(255,255,255,0.1)"/>
+</div>
 
 **Prerequisites:** Google Chrome, Brave, Arc, or Microsoft Edge.
 
-### Developer Loading
+### Option 1: Direct Link (Recommended)
+Visit the [**PromptPro Install Page**](https://promptpro-beta.vercel.app/#install) to get the latest version for Chrome.
+
+### Option 2: Developer Mode (Local Setup)
 1. **Clone or Download:** Pull this repository to your local machine.
 2. **Open Extensions Page:** Open your browser and navigate to `chrome://extensions/`.
 3. **Toggle Developer Mode:** Turn on the "Developer mode" switch in the top right.
@@ -78,5 +91,8 @@ Click the PromptPro extension icon in your toolbar to unlock advanced prompt set
 
 <br/>
 <div align="center">
+  <img src="./images/promptpro.png" alt="PromptPro Logo" width="300px" />
   <p>Built with 🤍 for maximum productivity.</p>
+  <p><a href="https://promptpro-beta.vercel.app/">promptpro-beta.vercel.app</a></p>
 </div>
+
