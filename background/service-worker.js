@@ -154,14 +154,33 @@ const REWRITE_STRATEGIES = {
    * ROLE → TASK → CONTEXT(preserved) → FORMAT → CONSTRAINTS
    */
   enhance(text) {
-    const analysis = analyzePrompt(text);
+    let activeText = text;
+    let extractedRole = null;
+
+    // Extract user custom role if present
+    const sentences = text.split(/(?<=[.!?])\s+/);
+    for (let i = 0; i < sentences.length; i++) {
+      const s = sentences[i].trim();
+      if (ANALYSIS_PATTERNS.hasRole.test(s)) {
+        extractedRole = s;
+        // Re-join remaining sentences as the core text
+        activeText = sentences.filter((_, idx) => idx !== i).join(' ');
+        break;
+      }
+    }
+
+    const analysis = analyzePrompt(activeText);
     const parts = [];
 
-    // 1. ROLE
-    const role = inferRole(analysis);
-    if (role) parts.push(role);
+    // 1. ROLE (use extracted user role, or infer one if user didn't specify one)
+    if (extractedRole) {
+      parts.push(extractedRole);
+    } else {
+      const inferred = inferRole(analysis);
+      if (inferred) parts.push(inferred);
+    }
 
-    // 2. TASK (clarified core prompt)
+    // 2. TASK (clarified core prompt using remaining activeText)
     parts.push(clarifyTask(analysis));
 
     // 3. CONTEXT — already embedded in the user's text, we don't fabricate
@@ -181,11 +200,29 @@ const REWRITE_STRATEGIES = {
    * Elaborate: Add chain-of-thought + reasoning scaffold.
    */
   elaborate(text) {
-    const analysis = analyzePrompt(text);
+    let activeText = text;
+    let extractedRole = null;
+
+    // Extract user custom role if present
+    const sentences = text.split(/(?<=[.!?])\s+/);
+    for (let i = 0; i < sentences.length; i++) {
+      const s = sentences[i].trim();
+      if (ANALYSIS_PATTERNS.hasRole.test(s)) {
+        extractedRole = s;
+        activeText = sentences.filter((_, idx) => idx !== i).join(' ');
+        break;
+      }
+    }
+
+    const analysis = analyzePrompt(activeText);
     const parts = [];
 
-    const role = inferRole(analysis);
-    if (role) parts.push(role);
+    if (extractedRole) {
+      parts.push(extractedRole);
+    } else {
+      const role = inferRole(analysis);
+      if (role) parts.push(role);
+    }
 
     parts.push(analysis.text);
 
@@ -592,8 +629,8 @@ const PromptDatabase = {
 const UPGRADE_CACHE_MAX = 64;
 const upgradeResultCache = new Map();
 
-function upgradeCacheKey(text, strategy, tone) {
-  return `${strategy}\0${tone == null ? '' : String(tone)}\0${text}`;
+function upgradeCacheKey(text, strategy, tone, noFluff, lowTokenEnabled) {
+  return `${strategy}\0${tone == null ? '' : String(tone)}\0${noFluff}\0${lowTokenEnabled}\0${text}`;
 }
 
 function cacheUpgradeGet(key) {
@@ -617,6 +654,132 @@ function isTrustedSender(sender) {
   return sender.id === chrome.runtime.id;
 }
 
+function fallbackLocal(text, strategy, tone, lowTokenEnabled = false) {
+  const rewriteFn = REWRITE_STRATEGIES[strategy] || REWRITE_STRATEGIES.enhance;
+  let rewritten = rewriteFn(text);
+  if (tone && TONE_PRESETS[tone]) {
+    rewritten = TONE_PRESETS[tone](rewritten);
+  }
+  if (lowTokenEnabled) {
+    rewritten = rewritten + '\n\nConform to these token-saving parameters:\n• Keep the entire response under 150 words.\n• Avoid verbose introductions, conversational preamble, or redundant phrasing.\n• State key points directly and concisely, utilizing bullet points where helpful.';
+  }
+  return rewritten;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCORE DIAGNOSTIC ENGINE — Granular Quality Insights (AskWeave-level details)
+// ═══════════════════════════════════════════════════════════════
+
+function getScoreDiagnostics(originalText, rewrittenText, beforeScore, afterScore) {
+  const originalAnalysis = analyzePrompt(originalText);
+  const rewrittenAnalysis = analyzePrompt(rewrittenText);
+  
+  const diagnostics = {
+    Clarity: [],
+    Specificity: [],
+    Structure: [],
+    Intent: []
+  };
+
+  // 1. CLARITY DIAGNOSTICS
+  if (originalAnalysis.wordCount < 6) {
+    diagnostics.Clarity.push({
+      type: 'tip',
+      message: 'Initial prompt was extremely short. Expanded core instructions for better clarity.'
+    });
+  } else {
+    diagnostics.Clarity.push({
+      type: 'success',
+      message: 'Original request was concise and easy to parse.'
+    });
+  }
+  const vagueWords = (originalText.match(/\b(stuff|things|something|somehow|whatever|etc|kind of|sort of)\b/gi) || []).length;
+  if (vagueWords > 0) {
+    diagnostics.Clarity.push({
+      type: 'tip',
+      message: `Detected ${vagueWords} vague placeholder words (e.g. 'stuff', 'things'). Removed them to prevent model confusion.`
+    });
+  } else {
+    diagnostics.Clarity.push({
+      type: 'success',
+      message: 'Zero ambiguous placeholder words detected.'
+    });
+  }
+
+  // 2. SPECIFICITY DIAGNOSTICS
+  if (rewrittenAnalysis.hasNumbers && !originalAnalysis.hasNumbers) {
+    diagnostics.Specificity.push({
+      type: 'success',
+      message: 'Added precise quantity, length, or boundary constraints to guide the output.'
+    });
+  } else if (!rewrittenAnalysis.hasNumbers) {
+    diagnostics.Specificity.push({
+      type: 'tip',
+      message: 'Lacks numeric constraints (e.g., "300 words", "top 5"). Added default focus limits.'
+    });
+  } else {
+    diagnostics.Specificity.push({
+      type: 'success',
+      message: 'Maintained specific quantitative parameters.'
+    });
+  }
+  if (originalAnalysis.hasExamples) {
+    diagnostics.Specificity.push({
+      type: 'success',
+      message: 'Kept the helpful sample/example structure you provided.'
+    });
+  } else {
+    diagnostics.Specificity.push({
+      type: 'tip',
+      message: 'No examples provided. Prompt upgraded to ask for contextual illustrations.'
+    });
+  }
+
+  // 3. STRUCTURE DIAGNOSTICS
+  if (rewrittenAnalysis.hasFormat && !originalAnalysis.hasFormat) {
+    diagnostics.Structure.push({
+      type: 'success',
+      message: 'Injected specific structure instructions (e.g., bulleted lists, clean markdown headings).'
+    });
+  } else if (originalAnalysis.hasFormat) {
+    diagnostics.Structure.push({
+      type: 'success',
+      message: 'Preserved your custom formatting criteria.'
+    });
+  } else {
+    diagnostics.Structure.push({
+      type: 'tip',
+      message: 'Implicit formatting. Added structured markdown layouts to prevent wall-of-text responses.'
+    });
+  }
+
+  // 4. INTENT DIAGNOSTICS
+  if (!originalAnalysis.hasRole) {
+    diagnostics.Intent.push({
+      type: 'success',
+      message: 'Assigned an expert professional persona to tap into high-quality training weights.'
+    });
+  } else {
+    diagnostics.Intent.push({
+      type: 'success',
+      message: 'Retained your custom expert role assignment.'
+    });
+  }
+  if (rewrittenAnalysis.hasConstraints && !originalAnalysis.hasConstraints) {
+    diagnostics.Intent.push({
+      type: 'success',
+      message: 'Added negative constraints ("do not", "avoid") to prevent hallucinations or generic filler.'
+    });
+  } else if (!rewrittenAnalysis.hasConstraints) {
+    diagnostics.Intent.push({
+      type: 'tip',
+      message: 'No negative constraints defined. Added default boundaries to exclude filler.'
+    });
+  }
+
+  return diagnostics;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // MESSAGE HANDLER
 // ═══════════════════════════════════════════════════════════════
@@ -630,12 +793,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'UPGRADE_PROMPT') {
     const { text, siteId, strategy = 'enhance', tone = null } = message.payload || {};
 
-    if (!text || typeof text !== 'string') {
-      sendResponse({ error: 'EMPTY', message: 'Please type a prompt first' });
-      return true;
-    }
-
-    if (text.trim().length === 0) {
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
       sendResponse({ error: 'EMPTY', message: 'Please type a prompt first' });
       return true;
     }
@@ -645,46 +803,89 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
-    const rewriteFn = REWRITE_STRATEGIES[strategy];
-    if (!rewriteFn) {
-      sendResponse({ error: 'UNKNOWN_STRATEGY', message: `Unknown strategy: ${strategy}` });
-      return true;
-    }
-
-    const cKey = upgradeCacheKey(text, strategy, tone);
-    const cached = cacheUpgradeGet(cKey);
-    if (cached) {
-      sendResponse(cached);
-      return true;
-    }
-
     const beforeScore = scorePrompt(text);
     const analysis = analyzePrompt(text);
 
     IntelligenceMemory.updateSession(text);
     const suggestionsPromise = generateSmartSuggestions(text, analysis);
 
-    let rewritten = rewriteFn(text);
-    if (tone && TONE_PRESETS[tone]) {
-      rewritten = TONE_PRESETS[tone](rewritten);
-    }
-    const afterScore = scorePrompt(rewritten);
+    // Retrieve settings dynamically to handle OpenRouter API & preferences
+    chrome.storage.local.get(['settings'], (result) => {
+      const settings = result.settings || {};
+      const openrouterEnabled = !!settings.openrouterEnabled;
+      const apiKey = settings.openrouterApiKey ? settings.openrouterApiKey.trim() : '';
+      const model = settings.openrouterModel || 'anthropic/claude-3.5-sonnet';
+      const noFluff = settings.noFluff !== false;
+      const lowTokenEnabled = !!settings.lowTokenEnabled;
 
-    suggestionsPromise.then((suggestions) => {
-      const payload = {
-        rewritten,
-        original: text,
-        score: {
-          before: beforeScore,
-          after: afterScore
-        },
-        suggestions,
-        strategy,
-        tone: tone || null,
-        applied: true
-      };
-      cacheUpgradeSet(cKey, payload);
-      sendResponse(payload);
+      const cKey = upgradeCacheKey(text, strategy, tone, noFluff, lowTokenEnabled);
+      const cached = cacheUpgradeGet(cKey);
+      if (cached) {
+        sendResponse(cached);
+        return;
+      }
+
+      let rewrittenPromise;
+
+      if (openrouterEnabled) {
+        // Call the Vercel API Endpoint
+        // IMPORTANT: Change this URL to your deployed Vercel URL (e.g., https://your-app.vercel.app/api/upgrade) before publishing
+        const apiUrl = 'https://prompt-pro.vercel.app/api/upgrade://localhost:3000/api/upgrade';
+
+        rewrittenPromise = fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            text: text,
+            strategy: strategy,
+            tone: tone,
+            lowTokenEnabled: lowTokenEnabled,
+            noFluff: noFluff,
+            model: model
+          })
+        })
+        .then(response => {
+          if (!response.ok) return response.json().then(e => { throw new Error(e.error || `HTTP ${response.status}`); });
+          return response.json();
+        })
+        .then(data => {
+          if (!data.success) throw new Error('API returned failure');
+          return data.rewritten;
+        })
+        .catch(error => {
+          console.warn('[PromptPro] Vercel API fetch failed. Falling back to local engine:', error);
+          return fallbackLocal(text, strategy, tone, lowTokenEnabled);
+        });
+      } else {
+        rewrittenPromise = Promise.resolve(fallbackLocal(text, strategy, tone, lowTokenEnabled));
+      }
+
+      Promise.all([rewrittenPromise, suggestionsPromise])
+        .then(([rewritten, suggestions]) => {
+          const afterScore = scorePrompt(rewritten);
+          const diagnostics = getScoreDiagnostics(text, rewritten, beforeScore, afterScore);
+
+          const payload = {
+            rewritten,
+            original: text,
+            score: {
+              before: beforeScore,
+              after: afterScore
+            },
+            suggestions,
+            diagnostics,
+            strategy,
+            tone: tone || null,
+            applied: true
+          };
+          cacheUpgradeSet(cKey, payload);
+          sendResponse(payload);
+        })
+        .catch(err => {
+          sendResponse({ error: 'UPGRADE_FAILED', message: err.message });
+        });
     });
 
     return true;
@@ -792,7 +993,9 @@ chrome.runtime.onInstalled.addListener((details) => {
         defaultStrategy: 'enhance',
         defaultTone: null,
         showScoreBadge: true,
-        enabled: true
+        enabled: true,
+        autocompleteEnabled: true,
+        lowTokenEnabled: false
       }
     });
   }

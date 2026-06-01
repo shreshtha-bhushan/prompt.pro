@@ -10,16 +10,35 @@
     showScoreBadge: true,
     enabled: true,
     noFluff: false,
-    siteMemory: true
+    lowTokenEnabled: false,
+    siteMemory: true,
+    openrouterEnabled: false,
+    openrouterApiKey: '',
+    openrouterModel: 'anthropic/claude-3.5-sonnet',
+    customModel: '',
+    autocompleteEnabled: true
   };
 
   const enabledToggle = document.getElementById('enabled-toggle');
   const scoreToggle = document.getElementById('score-toggle');
   const noFluffToggle = document.getElementById('no-fluff-toggle');
+  const lowTokenToggle = document.getElementById('low-token-toggle');
+  const autocompleteToggle = document.getElementById('autocomplete-toggle');
   const siteMemoryToggle = document.getElementById('site-memory-toggle');
   const strategyInputs = document.querySelectorAll('input[name="strategy"]');
   const toneSelector = document.getElementById('tone-dropdown');
   const toneDisplay = document.getElementById('current-tone');
+
+  const aiEngineToggle = document.getElementById('ai-engine-toggle');
+  const aiEngineSettings = document.getElementById('ai-engine-settings');
+  const openrouterApiKeyInput = document.getElementById('openrouter-api-key');
+  const toggleApiKeyBtn = document.getElementById('toggle-api-key');
+  const eyeIcon = document.getElementById('eye-icon');
+  
+  const modelDropdown = document.getElementById('model-dropdown');
+  const currentModelSpan = document.getElementById('current-model');
+  const customModelContainer = document.getElementById('custom-model-container');
+  const customModelInput = document.getElementById('custom-model-input');
 
   const navItems = document.querySelectorAll('.bottom-nav__item');
   const tabPanes = document.querySelectorAll('.popup__tab-pane');
@@ -156,31 +175,124 @@
     const settings = { ...DEFAULT_SETTINGS, ...result.settings };
     promptDb = result.promptDb || { history: [], library: [], contextBlocks: [], historyLimit: 50 };
 
-    if (enabledToggle) enabledToggle.checked = settings.enabled !== false;
-    if (scoreToggle) scoreToggle.checked = settings.showScoreBadge !== false;
-    if (noFluffToggle) noFluffToggle.checked = !!settings.noFluff;
-    if (siteMemoryToggle) siteMemoryToggle.checked = settings.siteMemory !== false;
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      let siteId = null;
+      if (tabs && tabs[0] && tabs[0].url) {
+        const url = tabs[0].url;
+        if (url.includes('chatgpt.com') || url.includes('chat.openai.com')) siteId = 'chatgpt';
+        else if (url.includes('claude.ai')) siteId = 'claude';
+        else if (url.includes('gemini.google.com')) siteId = 'gemini';
+        else if (url.includes('perplexity.ai')) siteId = 'perplexity';
+      }
 
-    const targetRadio = Array.from(strategyInputs).find((r) => r.value === (settings.defaultStrategy || 'enhance'));
-    if (targetRadio) targetRadio.checked = true;
+      // If siteMemory is enabled and we are on a supported site, display that site's settings
+      let activeToneValue = settings.defaultTone || 'professional';
+      let activeStrategyValue = settings.defaultStrategy || 'enhance';
 
-    const activeToneValue = settings.defaultTone || 'professional';
-    const activeToneItem = toneSelector?.querySelector(`[data-value="${activeToneValue}"]`);
-    if (activeToneItem && toneDisplay) {
-      toneDisplay.textContent = activeToneItem.querySelector('span').textContent;
-      toneSelector.querySelectorAll('.popup__dropdown-item').forEach((b) => b.classList.remove('popup__dropdown-item--active'));
-      activeToneItem.classList.add('popup__dropdown-item--active');
-    }
+      if (settings.siteMemory && siteId && settings.sites?.[siteId]) {
+        if (settings.sites[siteId].defaultTone !== undefined) {
+          activeToneValue = settings.sites[siteId].defaultTone;
+        }
+        if (settings.sites[siteId].defaultStrategy !== undefined) {
+          activeStrategyValue = settings.sites[siteId].defaultStrategy;
+        }
+      }
 
-    renderTabContent('history');
-    renderTabContent('library');
-    renderTabContent('context');
+      if (enabledToggle) enabledToggle.checked = settings.enabled !== false;
+      if (scoreToggle) scoreToggle.checked = settings.showScoreBadge !== false;
+      if (noFluffToggle) noFluffToggle.checked = !!settings.noFluff;
+      if (lowTokenToggle) lowTokenToggle.checked = !!settings.lowTokenEnabled;
+      if (autocompleteToggle) autocompleteToggle.checked = settings.autocompleteEnabled !== false;
+      if (siteMemoryToggle) siteMemoryToggle.checked = settings.siteMemory !== false;
+
+      const targetRadio = Array.from(strategyInputs).find((r) => r.value === activeStrategyValue);
+      if (targetRadio) targetRadio.checked = true;
+
+      const activeToneItem = toneSelector?.querySelector(`[data-value="${activeToneValue}"]`);
+      if (activeToneItem && toneDisplay) {
+        toneDisplay.textContent = activeToneItem.querySelector('span').textContent;
+        toneSelector.querySelectorAll('.popup__dropdown-item').forEach((b) => b.classList.remove('popup__dropdown-item--active'));
+        activeToneItem.classList.add('popup__dropdown-item--active');
+      }
+
+      // Load AI engine settings
+      if (aiEngineToggle) {
+        aiEngineToggle.checked = !!settings.openrouterEnabled;
+        if (aiEngineSettings) {
+          aiEngineSettings.style.display = settings.openrouterEnabled ? 'flex' : 'none';
+        }
+      }
+      if (openrouterApiKeyInput) {
+        openrouterApiKeyInput.value = settings.openrouterApiKey || '';
+      }
+      if (customModelInput) {
+        customModelInput.value = settings.customModel || '';
+      }
+
+      const activeModelValue = settings.openrouterModel || 'anthropic/claude-3.5-sonnet';
+      const activeModelItem = modelDropdown?.querySelector(`[data-value="${activeModelValue}"]`);
+      if (currentModelSpan && modelDropdown) {
+        modelDropdown.querySelectorAll('.popup__dropdown-item').forEach((b) => b.classList.remove('popup__dropdown-item--active'));
+        if (activeModelItem) {
+          currentModelSpan.textContent = activeModelItem.querySelector('span').textContent;
+          activeModelItem.classList.add('popup__dropdown-item--active');
+          if (customModelContainer) customModelContainer.style.display = 'none';
+        } else {
+          // Custom model
+          currentModelSpan.textContent = 'Custom model...';
+          const customItem = modelDropdown?.querySelector('[data-value="custom"]');
+          if (customItem) customItem.classList.add('popup__dropdown-item--active');
+          if (customModelContainer) customModelContainer.style.display = 'flex';
+        }
+      }
+
+      renderTabContent('history');
+      renderTabContent('library');
+      renderTabContent('context');
+    });
   });
 
   function saveSettings(updates) {
     chrome.storage.local.get(['settings'], (result) => {
-      const settings = { ...DEFAULT_SETTINGS, ...result.settings, ...updates };
-      chrome.storage.local.set({ settings });
+      const settings = { ...DEFAULT_SETTINGS, ...result.settings };
+      
+      const shouldCheckSite = settings.siteMemory && 
+        (updates.defaultStrategy !== undefined || updates.defaultTone !== undefined);
+      
+      if (shouldCheckSite && typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          let siteId = null;
+          if (tabs && tabs[0] && tabs[0].url) {
+            const url = tabs[0].url;
+            if (url.includes('chatgpt.com') || url.includes('chat.openai.com')) siteId = 'chatgpt';
+            else if (url.includes('claude.ai')) siteId = 'claude';
+            else if (url.includes('gemini.google.com')) siteId = 'gemini';
+            else if (url.includes('perplexity.ai')) siteId = 'perplexity';
+          }
+
+          if (siteId) {
+            if (!settings.sites) settings.sites = {};
+            if (!settings.sites[siteId]) settings.sites[siteId] = {};
+            
+            if (updates.defaultStrategy !== undefined) {
+              settings.sites[siteId].defaultStrategy = updates.defaultStrategy;
+            }
+            if (updates.defaultTone !== undefined) {
+              settings.sites[siteId].defaultTone = updates.defaultTone;
+            }
+            
+            // Apply updates to the settings root object as well (keeps standard default / fallback)
+            Object.assign(settings, updates);
+          } else {
+            Object.assign(settings, updates);
+          }
+          
+          chrome.storage.local.set({ settings });
+        });
+      } else {
+        Object.assign(settings, updates);
+        chrome.storage.local.set({ settings });
+      }
     });
   }
 
@@ -231,6 +343,26 @@
     saveSettings({ noFluff: noFluffToggle.checked });
   });
 
+  lowTokenToggle?.addEventListener('change', async () => {
+    if (lowTokenToggle.checked) {
+      const ok = await showConfirmDrawer({
+        title: 'Enable Low Token Mode?',
+        description: 'This instructs the AI to enforce a strict 150-word or 3-bullet point limit to minimize token usage. Keep this turned off if you want larger, more detailed responses.',
+        confirmLabel: 'Enable',
+        cancelLabel: 'Keep Disabled'
+      });
+      if (!ok) {
+        lowTokenToggle.checked = false;
+        return;
+      }
+    }
+    saveSettings({ lowTokenEnabled: lowTokenToggle.checked });
+  });
+
+  autocompleteToggle?.addEventListener('change', () => {
+    saveSettings({ autocompleteEnabled: autocompleteToggle.checked });
+  });
+
   siteMemoryToggle?.addEventListener('change', () => {
     saveSettings({ siteMemory: siteMemoryToggle.checked });
   });
@@ -241,6 +373,73 @@
         saveSettings({ defaultStrategy: e.target.value });
       }
     });
+  });
+
+  // Toggle AI settings display on checkbox change
+  aiEngineToggle?.addEventListener('change', () => {
+    const enabled = aiEngineToggle.checked;
+    if (aiEngineSettings) {
+      aiEngineSettings.style.display = enabled ? 'flex' : 'none';
+    }
+    saveSettings({ openrouterEnabled: enabled });
+  });
+
+  // Save API Key on input/change
+  openrouterApiKeyInput?.addEventListener('input', () => {
+    saveSettings({ openrouterApiKey: openrouterApiKeyInput.value.trim() });
+  });
+
+  // Toggle API Key eye visibility
+  toggleApiKeyBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (openrouterApiKeyInput.type === 'password') {
+      openrouterApiKeyInput.type = 'text';
+      eyeIcon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>'; // Slashed eye SVG
+    } else {
+      openrouterApiKeyInput.type = 'password';
+      eyeIcon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>'; // Eye SVG
+    }
+  });
+
+  // Model dropdown events
+  const modelTrigger = modelDropdown?.querySelector('.popup__dropdown-trigger');
+  modelTrigger?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    modelDropdown.classList.toggle('popup__dropdown--open');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (modelDropdown && !modelDropdown.contains(e.target)) {
+      modelDropdown.classList.remove('popup__dropdown--open');
+    }
+  });
+
+  modelDropdown?.addEventListener('click', (e) => {
+    const item = e.target.closest('.popup__dropdown-item');
+    if (!item) return;
+
+    modelDropdown.querySelectorAll('.popup__dropdown-item').forEach((b) =>
+      b.classList.remove('popup__dropdown-item--active')
+    );
+    item.classList.add('popup__dropdown-item--active');
+
+    if (currentModelSpan) currentModelSpan.textContent = item.querySelector('span').textContent;
+    modelDropdown.classList.remove('popup__dropdown--open');
+
+    const modelVal = item.getAttribute('data-value');
+    if (modelVal === 'custom') {
+      if (customModelContainer) customModelContainer.style.display = 'flex';
+      saveSettings({ openrouterModel: customModelInput.value.trim() });
+    } else {
+      if (customModelContainer) customModelContainer.style.display = 'none';
+      saveSettings({ openrouterModel: modelVal });
+    }
+  });
+
+  // Custom Model Input event
+  customModelInput?.addEventListener('input', () => {
+    const customVal = customModelInput.value.trim();
+    saveSettings({ customModel: customVal, openrouterModel: customVal });
   });
 
   const toneTrigger = toneSelector?.querySelector('.popup__dropdown-trigger');
@@ -404,6 +603,31 @@
         const actions = document.createElement('div');
         actions.className = 'sidebar__item-actions';
 
+        const injectBtn = document.createElement('button');
+        injectBtn.type = 'button';
+        injectBtn.className = 'sidebar__mini-btn';
+        injectBtn.style.background = '#ffffff';
+        injectBtn.style.color = '#000000';
+        injectBtn.style.fontWeight = '600';
+        injectBtn.textContent = 'Inject';
+        injectBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs && tabs[0]) {
+              chrome.tabs.sendMessage(tabs[0].id, {
+                type: 'INJECT_TEMPLATE',
+                payload: { title: item.title, text: item.text }
+              }, () => {
+                if (chrome.runtime.lastError) {
+                  navigator.clipboard.writeText(item.text || '').catch(() => {});
+                } else {
+                  window.close();
+                }
+              });
+            }
+          });
+        });
+
         const copyBtn = document.createElement('button');
         copyBtn.type = 'button';
         copyBtn.className = 'sidebar__mini-btn';
@@ -436,6 +660,7 @@
           }
         });
 
+        actions.appendChild(injectBtn);
         actions.appendChild(copyBtn);
         actions.appendChild(delBtn);
 
