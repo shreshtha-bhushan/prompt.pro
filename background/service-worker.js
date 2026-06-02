@@ -830,7 +830,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (openrouterEnabled) {
         // Call the Vercel API Endpoint
         // IMPORTANT: Change this URL to your deployed Vercel URL (e.g., https://your-app.vercel.app/api/upgrade) before publishing
-        const apiUrl = 'https://prompt-pro.vercel.app/api/upgrade://localhost:3000/api/upgrade';
+        const apiUrl = 'https://prompt-pro.vercel.app/api/upgrade';
+        console.log('[PromptPro] Sending request to Vercel API...', apiUrl);
 
         rewrittenPromise = fetch(apiUrl, {
           method: 'POST',
@@ -859,6 +860,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return fallbackLocal(text, strategy, tone, lowTokenEnabled);
         });
       } else {
+        console.log('[PromptPro] Using local fallback engine (OpenRouter disabled in settings)');
         rewrittenPromise = Promise.resolve(fallbackLocal(text, strategy, tone, lowTokenEnabled));
       }
 
