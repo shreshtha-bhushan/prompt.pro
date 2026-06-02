@@ -34,27 +34,4 @@ export const auth0 = new Auth0Client({
   clientSecret: finalClientSecret,
   secret: finalSecret,
   appBaseUrl: appBaseUrl,
-  
-  async beforeSessionSaved(session) {
-    if (session && session.user) {
-      const { email, name } = session.user;
-      if (email) {
-        // Dynamically import prisma to prevent loading pg driver in Edge Middleware runtime
-        const { default: prisma } = await import('./prisma');
-        const dbUser = await prisma.user.upsert({
-          where: { email },
-          update: { 
-            name: name || null,
-          },
-          create: { 
-            email, 
-            name: name || null,
-          },
-        });
-        // Save the user database id on the session user object
-        session.user.dbId = dbUser.id;
-      }
-    }
-    return session;
-  }
 });
