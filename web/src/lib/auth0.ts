@@ -1,19 +1,38 @@
 import { Auth0Client } from '@auth0/nextjs-auth0/server';
 
-// Map v3 environment variables to v4 constructor options to keep it backward-compatible
-const rawIssuer = process.env.AUTH0_ISSUER_BASE_URL || 'https://dummy-auth0-tenant.auth0.com';
-const domain = rawIssuer.replace('https://', '').replace('/', '');
-
 const isVercel = !!process.env.VERCEL || !!process.env.VERCEL_URL;
+
+// Map environment variables robustly to support both v3 and v4 configurations
+const rawIssuer = process.env.AUTH0_ISSUER_BASE_URL || '';
+let domain = process.env.AUTH0_DOMAIN || '';
+
+if (rawIssuer && !domain) {
+  domain = rawIssuer.replace('https://', '').replace('/', '');
+}
+
+const finalDomain = domain || 'dummy-auth0-tenant.auth0.com';
+const finalClientId = process.env.AUTH0_CLIENT_ID || 'dummy-auth0-client-id';
+const finalClientSecret = process.env.AUTH0_CLIENT_SECRET || 'dummy-auth0-client-secret';
+const finalSecret = process.env.AUTH0_SECRET || 'dummy-auth0-session-encryption-secret-32-chars';
+
 const appBaseUrl = isVercel
   ? 'https://prompt-pro-liart.vercel.app'
   : (process.env.AUTH0_BASE_URL || 'http://localhost:3000');
 
+// Server-side diagnostic logs to help locate missing keys
+if (isVercel) {
+  if (finalDomain.startsWith('dummy') || finalClientId.startsWith('dummy') || finalSecret.startsWith('dummy')) {
+    console.error('⚠️ [PromptPro Auth0 Warning]: Running with fallback DUMMY credentials! Please configure Vercel Settings > Environment Variables.');
+  } else {
+    console.log('✅ [PromptPro Auth0]: Live credentials loaded successfully.');
+  }
+}
+
 export const auth0 = new Auth0Client({
-  domain: domain || 'dummy-auth0-tenant.auth0.com',
-  clientId: process.env.AUTH0_CLIENT_ID || 'dummy-auth0-client-id',
-  clientSecret: process.env.AUTH0_CLIENT_SECRET || 'dummy-auth0-client-secret',
-  secret: process.env.AUTH0_SECRET || 'dummy-auth0-session-encryption-secret-32-chars',
+  domain: finalDomain,
+  clientId: finalClientId,
+  clientSecret: finalClientSecret,
+  secret: finalSecret,
   appBaseUrl: appBaseUrl,
   
   async beforeSessionSaved(session) {
