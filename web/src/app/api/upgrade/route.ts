@@ -17,8 +17,9 @@ export async function POST(request: Request) {
       tone = null,
       lowTokenEnabled = false,
       noFluff = true,
-      model = 'google/gemini-2.0-flash-lite-preview-02-05:free',
     } = data;
+
+    const model = 'deepseek/deepseek-v4-flash';
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json({ error: 'Empty prompt text provided.' }, { status: 400, headers });
