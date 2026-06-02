@@ -1,21 +1,22 @@
 import { Auth0Client } from '@auth0/nextjs-auth0/server';
-import prisma from './prisma';
 
 // Map v3 environment variables to v4 constructor options to keep it backward-compatible
-const rawIssuer = process.env.AUTH0_ISSUER_BASE_URL || '';
+const rawIssuer = process.env.AUTH0_ISSUER_BASE_URL || 'https://dummy-auth0-tenant.auth0.com';
 const domain = rawIssuer.replace('https://', '').replace('/', '');
 
 export const auth0 = new Auth0Client({
-  domain: domain || undefined,
-  clientId: process.env.AUTH0_CLIENT_ID,
-  clientSecret: process.env.AUTH0_CLIENT_SECRET,
-  secret: process.env.AUTH0_SECRET,
-  appBaseUrl: process.env.AUTH0_BASE_URL || process.env.APP_BASE_URL,
+  domain: domain || 'dummy-auth0-tenant.auth0.com',
+  clientId: process.env.AUTH0_CLIENT_ID || 'dummy-auth0-client-id',
+  clientSecret: process.env.AUTH0_CLIENT_SECRET || 'dummy-auth0-client-secret',
+  secret: process.env.AUTH0_SECRET || 'dummy-auth0-session-encryption-secret-32-chars',
+  appBaseUrl: process.env.AUTH0_BASE_URL || process.env.APP_BASE_URL || 'http://localhost:3000',
   
   async beforeSessionSaved(session) {
     if (session && session.user) {
       const { email, name } = session.user;
       if (email) {
+        // Dynamically import prisma to prevent loading pg driver in Edge Middleware runtime
+        const { default: prisma } = await import('./prisma');
         const dbUser = await prisma.user.upsert({
           where: { email },
           update: { 
