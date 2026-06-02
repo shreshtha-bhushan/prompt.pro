@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       tone = null,
       lowTokenEnabled = false,
       noFluff = true,
-      model = 'anthropic/claude-3.5-sonnet',
+      model = 'google/gemini-2.0-flash-lite-preview-02-05:free',
     } = data;
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
