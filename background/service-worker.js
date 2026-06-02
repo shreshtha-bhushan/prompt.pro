@@ -813,8 +813,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.local.get(['settings'], (result) => {
       const settings = result.settings || {};
       const openrouterEnabled = !!settings.openrouterEnabled;
-      const apiKey = settings.openrouterApiKey ? settings.openrouterApiKey.trim() : '';
-      const model = settings.openrouterModel || 'anthropic/claude-3.5-sonnet';
       const noFluff = settings.noFluff !== false;
       const lowTokenEnabled = !!settings.lowTokenEnabled;
 
@@ -831,7 +829,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Call the Vercel API Endpoint
         // IMPORTANT: Change this URL to your deployed Vercel URL (e.g., https://your-app.vercel.app/api/upgrade) before publishing
         const apiUrl = 'https://prompt-pro-liart.vercel.app/api/upgrade';
-';
         console.log('[PromptPro] Sending request to Vercel API...', apiUrl);
 
         rewrittenPromise = fetch(apiUrl, {
@@ -844,8 +841,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             strategy: strategy,
             tone: tone,
             lowTokenEnabled: lowTokenEnabled,
-            noFluff: noFluff,
-            model: model
+            noFluff: noFluff
           })
         })
         .then(response => {

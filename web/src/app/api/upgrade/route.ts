@@ -35,18 +35,46 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Server misconfiguration: missing API key.' }, { status: 500, headers });
     }
 
-    let systemPrompt = "You are PromptPro, an expert prompt engineering AI. Your job is to rewrite and optimize the user's input prompt based on their chosen strategy and tone.";
-    
+    let systemPrompt = `You are PromptPro, an expert prompt engineering AI. Your job is to rewrite and optimize the user's input prompt based on their chosen strategy and tone.
+
+CRITICAL INSTRUCTION:
+Your response must consist ONLY of the final, optimized prompt itself. You must absolutely NOT include any conversational introductory remarks, conversational preambles (e.g., "To optimize your request...", "Here is the optimized prompt:"), conversational postambles, explanations of changes, or greetings. Start your output directly with the rewritten prompt text. Do not wrap the output in markdown code blocks or backticks.`;
+
     if (strategy === "elaborate") {
-      systemPrompt += "\n\nStrategy [ELABORATE]: Expand the prompt with a systematic reasoning scaffold and chain-of-thought structure. Encourage deep analysis.";
+      systemPrompt += `
+
+Strategy [ELABORATE]:
+Expand the prompt with a systematic reasoning scaffold and chain-of-thought structure. Encourage deep analysis.
+Desired Output Structure:
+Start directly with the first line of the rewritten prompt. Expand the task into structured thinking steps.`;
     } else if (strategy === "concise") {
-      systemPrompt += "\n\nStrategy [CONCISE]: Strip away any fluff, focus on directness, and enforce short, bullet-pointed, high-density instructions.";
+      systemPrompt += `
+
+Strategy [CONCISE]:
+Strip away any fluff, focus on directness, and enforce short, bullet-pointed, high-density instructions.
+Desired Output Structure:
+Start directly with the first bullet point or instruction. Avoid any preamble or intro.`;
     } else {
-      systemPrompt += "\n\nStrategy [ENHANCE]: Apply a complete 5-component decomposition framework: define an expert ROLE, state the clarified core TASK, preserve existing CONTEXT, outline a clear output FORMAT, and establish quality CONSTRAINTS.";
+      systemPrompt += `
+
+Strategy [ENHANCE]:
+Apply a complete 5-component decomposition framework.
+Your output must start directly with:
+**Role:** [Expert role definition]
+
+**Task:** [Clarified core task]
+
+**Context:** [Preserved context]
+
+**Format:** [Clear output format specification]
+
+**Constraints:** [Established quality constraints]
+
+Do NOT output any intro text before "**Role:**".`;
     }
 
     if (tone) {
-      systemPrompt += `\n\nTone [${tone.toUpperCase()}]: Enforce a ${tone} tone throughout the response.`;
+      systemPrompt += `\n\nTone [${tone.toUpperCase()}]: Enforce a ${tone} tone throughout the optimized prompt's instructions and requirements.`;
     }
 
     if (lowTokenEnabled) {
@@ -54,7 +82,7 @@ export async function POST(request: Request) {
     }
 
     if (noFluff) {
-      systemPrompt += "\n\nCRITICAL CONSTRAINTS (NO-FLUFF):\n1. Output ONLY the raw, enhanced prompt that the user will copy and paste.\n2. Do NOT include any greetings, introduction, closing remarks, explanations of changes, or conversational filler.\n3. Do NOT wrap the prompt in markdown code blocks or backticks. Output pure, copyable text.";
+      systemPrompt += "\n\nCRITICAL CONSTRAINTS (NO-FLUFF):\n1. Output ONLY the raw, enhanced prompt that the user will copy and paste.\n2. Do NOT include any greetings, introduction, closing remarks, explanations of changes, or conversational filler.\n3. Do NOT wrap the prompt in markdown code blocks or backticks. Output pure, copyable text. Start directly with the first character of the rewritten prompt.";
     }
 
     const openrouterResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -98,10 +126,29 @@ export async function POST(request: Request) {
 
     let cleanText = aiText.trim();
     if (noFluff) {
+      // 1. Remove markdown code blocks if present
       if (cleanText.startsWith("```") && cleanText.endsWith("```")) {
         cleanText = cleanText.replace(/^```[a-zA-Z]*\n/, "").replace(/\n```$/, "");
       }
-      cleanText = cleanText.replace(/^(here is|here's|sure, here is|sure, here's) the (enhanced|rewritten|optimized|upgraded)? prompt:?\n*/i, "");
+      
+      // 2. Remove standard conversational preambles/intros
+      cleanText = cleanText.replace(/^(here is|here's|sure, here is|sure, here's|certainly, here is|certainly, here's) the (enhanced|rewritten|optimized|upgraded)? prompt:?\n*/i, "");
+      
+      // 3. Remove academic/meta explanations (e.g. "To optimize your request using the ENHANCE strategy... I have restructured...")
+      cleanText = cleanText.replace(/^[\s\S]*?(?:###\s+Optimized\s+Prompt|###\s+Enhanced\s+Prompt|###\s+Upgraded\s+Prompt)\s*/i, "");
+      cleanText = cleanText.replace(/^(?:To\s+optimize\s+your\s+request|I\s+have\s+restructured|I've\s+optimized|Here\s+is\s+your\s+enhanced|Here\s+is\s+the\s+optimized)[\s\S]*?(?:\*{3,}|\-{3,})\s*/i, "");
+      
+      // 4. Failsafe for ENHANCE strategy: if output contains "**Role:**" or "Role:", discard anything before it
+      const roleIndex = cleanText.search(/\*\*(?:Role|Persona)\*\*:/i);
+      if (roleIndex > 0) {
+        cleanText = cleanText.substring(roleIndex).trim();
+      } else {
+        const plainRoleIndex = cleanText.search(/^(?:Role|Persona):/im);
+        if (plainRoleIndex > 0) {
+          cleanText = cleanText.substring(plainRoleIndex).trim();
+        }
+      }
+      
       cleanText = cleanText.trim();
     }
 

@@ -30,15 +30,6 @@
   const toneDisplay = document.getElementById('current-tone');
 
   const aiEngineToggle = document.getElementById('ai-engine-toggle');
-  const aiEngineSettings = document.getElementById('ai-engine-settings');
-  const openrouterApiKeyInput = document.getElementById('openrouter-api-key');
-  const toggleApiKeyBtn = document.getElementById('toggle-api-key');
-  const eyeIcon = document.getElementById('eye-icon');
-  
-  const modelDropdown = document.getElementById('model-dropdown');
-  const currentModelSpan = document.getElementById('current-model');
-  const customModelContainer = document.getElementById('custom-model-container');
-  const customModelInput = document.getElementById('custom-model-input');
 
   const navItems = document.querySelectorAll('.bottom-nav__item');
   const tabPanes = document.querySelectorAll('.popup__tab-pane');
@@ -218,32 +209,6 @@
       // Load AI engine settings
       if (aiEngineToggle) {
         aiEngineToggle.checked = !!settings.openrouterEnabled;
-        if (aiEngineSettings) {
-          aiEngineSettings.style.display = settings.openrouterEnabled ? 'flex' : 'none';
-        }
-      }
-      if (openrouterApiKeyInput) {
-        openrouterApiKeyInput.value = settings.openrouterApiKey || '';
-      }
-      if (customModelInput) {
-        customModelInput.value = settings.customModel || '';
-      }
-
-      const activeModelValue = settings.openrouterModel || 'anthropic/claude-3.5-sonnet';
-      const activeModelItem = modelDropdown?.querySelector(`[data-value="${activeModelValue}"]`);
-      if (currentModelSpan && modelDropdown) {
-        modelDropdown.querySelectorAll('.popup__dropdown-item').forEach((b) => b.classList.remove('popup__dropdown-item--active'));
-        if (activeModelItem) {
-          currentModelSpan.textContent = activeModelItem.querySelector('span').textContent;
-          activeModelItem.classList.add('popup__dropdown-item--active');
-          if (customModelContainer) customModelContainer.style.display = 'none';
-        } else {
-          // Custom model
-          currentModelSpan.textContent = 'Custom model...';
-          const customItem = modelDropdown?.querySelector('[data-value="custom"]');
-          if (customItem) customItem.classList.add('popup__dropdown-item--active');
-          if (customModelContainer) customModelContainer.style.display = 'flex';
-        }
       }
 
       renderTabContent('history');
@@ -378,68 +343,7 @@
   // Toggle AI settings display on checkbox change
   aiEngineToggle?.addEventListener('change', () => {
     const enabled = aiEngineToggle.checked;
-    if (aiEngineSettings) {
-      aiEngineSettings.style.display = enabled ? 'flex' : 'none';
-    }
     saveSettings({ openrouterEnabled: enabled });
-  });
-
-  // Save API Key on input/change
-  openrouterApiKeyInput?.addEventListener('input', () => {
-    saveSettings({ openrouterApiKey: openrouterApiKeyInput.value.trim() });
-  });
-
-  // Toggle API Key eye visibility
-  toggleApiKeyBtn?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (openrouterApiKeyInput.type === 'password') {
-      openrouterApiKeyInput.type = 'text';
-      eyeIcon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>'; // Slashed eye SVG
-    } else {
-      openrouterApiKeyInput.type = 'password';
-      eyeIcon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>'; // Eye SVG
-    }
-  });
-
-  // Model dropdown events
-  const modelTrigger = modelDropdown?.querySelector('.popup__dropdown-trigger');
-  modelTrigger?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    modelDropdown.classList.toggle('popup__dropdown--open');
-  });
-
-  document.addEventListener('click', (e) => {
-    if (modelDropdown && !modelDropdown.contains(e.target)) {
-      modelDropdown.classList.remove('popup__dropdown--open');
-    }
-  });
-
-  modelDropdown?.addEventListener('click', (e) => {
-    const item = e.target.closest('.popup__dropdown-item');
-    if (!item) return;
-
-    modelDropdown.querySelectorAll('.popup__dropdown-item').forEach((b) =>
-      b.classList.remove('popup__dropdown-item--active')
-    );
-    item.classList.add('popup__dropdown-item--active');
-
-    if (currentModelSpan) currentModelSpan.textContent = item.querySelector('span').textContent;
-    modelDropdown.classList.remove('popup__dropdown--open');
-
-    const modelVal = item.getAttribute('data-value');
-    if (modelVal === 'custom') {
-      if (customModelContainer) customModelContainer.style.display = 'flex';
-      saveSettings({ openrouterModel: customModelInput.value.trim() });
-    } else {
-      if (customModelContainer) customModelContainer.style.display = 'none';
-      saveSettings({ openrouterModel: modelVal });
-    }
-  });
-
-  // Custom Model Input event
-  customModelInput?.addEventListener('input', () => {
-    const customVal = customModelInput.value.trim();
-    saveSettings({ customModel: customVal, openrouterModel: customVal });
   });
 
   const toneTrigger = toneSelector?.querySelector('.popup__dropdown-trigger');

@@ -102,7 +102,7 @@
         </section>
 
         <section class="popup__section">
-          <h2 class="popup__section-title">AI Upgrader (OpenRouter)</h2>
+          <h2 class="popup__section-title">AI Optimization</h2>
           
           <div class="popup__option">
             <div class="popup__option-content">
@@ -114,52 +114,6 @@
               <span class="popup__switch-border"></span>
               <span class="popup__switch-track"><span class="popup__switch-thumb"></span></span>
             </label>
-          </div>
-
-          <div id="ai-engine-settings" style="display: none; flex-direction: column; gap: 10px; margin-top: 10px;">
-            <div class="popup__composer" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0; gap: 6px;">
-              <label class="popup__option-title" style="font-size: 10px; margin-left: 2px;">OpenRouter API Key</label>
-              <div style="position: relative; width: 100%;">
-                <input type="password" id="openrouter-api-key" class="popup__field" placeholder="sk-or-v1-..." autocomplete="off" style="padding-right: 32px;" />
-                <button type="button" id="toggle-api-key" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: rgba(255,255,255,0.4); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px;">
-                  <svg id="eye-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                </button>
-              </div>
-            </div>
-
-            <div class="popup__composer" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0; gap: 6px;">
-              <label class="popup__option-title" style="font-size: 10px; margin-left: 2px;">AI Model</label>
-              <div class="popup__dropdown" id="model-dropdown">
-                <div class="popup__dropdown-trigger" style="padding: 12px 16px; border-radius: 12px; font-size: 13px; background: #1c1c1e; border: 1px solid rgba(255, 255, 255, 0.08);">
-                  <span id="current-model">Claude 3.5 Sonnet (Recommended)</span>
-                  <span class="popup__dropdown-chevron">
-                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1L5 5L9 1"/></svg>
-                  </span>
-                </div>
-                <div class="popup__dropdown-menu" style="max-height: 140px;">
-                  <div class="popup__dropdown-item popup__dropdown-item--active" data-value="anthropic/claude-3.5-sonnet">
-                    <span>Claude 3.5 Sonnet</span>
-                    <svg class="popup__dropdown-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
-                  </div>
-                  <div class="popup__dropdown-item" data-value="openai/gpt-4o">
-                    <span>GPT-4o</span>
-                    <svg class="popup__dropdown-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
-                  </div>
-                  <div class="popup__dropdown-item" data-value="meta-llama/llama-3.1-70b-instruct">
-                    <span>Llama 3.1 70B</span>
-                    <svg class="popup__dropdown-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
-                  </div>
-                  <div class="popup__dropdown-item" data-value="custom">
-                    <span>Custom model...</span>
-                    <svg class="popup__dropdown-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div id="custom-model-container" class="popup__composer" style="display: none; border-bottom: none; margin-bottom: 0; padding-bottom: 0; gap: 6px;">
-              <input type="text" id="custom-model-input" class="popup__field" placeholder="e.g., mistralai/mixtral-8x7b-instruct" autocomplete="off" />
-            </div>
           </div>
         </section>
 
