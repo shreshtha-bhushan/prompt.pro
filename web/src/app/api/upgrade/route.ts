@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+export const runtime = 'edge';
 
 export async function POST(request: Request) {
   // CORS setup
@@ -73,16 +74,24 @@ export async function POST(request: Request) {
     });
 
     if (!openrouterResponse.ok) {
-      const errorPayload = await openrouterResponse.json();
-      const apiErrorMessage = errorPayload.error?.message || `HTTP status ${openrouterResponse.status}`;
-      return NextResponse.json({ error: `OpenRouter API rejected call: ${apiErrorMessage}` }, { status: 502, headers });
+      let errorPayload;
+      try {
+        errorPayload = await openrouterResponse.json();
+      } catch (e) {
+        errorPayload = { error: { message: `HTTP status ${openrouterResponse.status}` } };
+      }
+      return NextResponse.json({ 
+        error: 'OpenRouter rejected the request', 
+        details: errorPayload,
+        status: openrouterResponse.status
+      }, { status: openrouterResponse.status, headers });
     }
 
     const completion = await openrouterResponse.json();
     let aiText = completion.choices?.[0]?.message?.content;
     
     if (!aiText) {
-      return NextResponse.json({ error: 'Received empty completion from OpenRouter.' }, { status: 502, headers });
+      return NextResponse.json({ error: 'Received empty completion from OpenRouter.', details: completion }, { status: 502, headers });
     }
 
     let cleanText = aiText.trim();
