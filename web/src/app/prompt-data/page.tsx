@@ -1,5 +1,5 @@
-import { PromptDataPanel } from "@/components/prompt-data-panel";
+import { redirect } from 'next/navigation';
 
 export default function PromptDataPage() {
-  return <PromptDataPanel />;
+  redirect('/');
 }
