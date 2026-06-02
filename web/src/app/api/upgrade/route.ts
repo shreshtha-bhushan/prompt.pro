@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import config from '../../../../config.json';
 
 export const runtime = 'edge';
 
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
       noFluff = true,
     } = data;
 
-    const model = 'deepseek/deepseek-v4-flash';
+    const model = config.model;
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json({ error: 'Empty prompt text provided.' }, { status: 400, headers });
