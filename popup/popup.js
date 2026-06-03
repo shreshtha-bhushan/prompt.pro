@@ -397,6 +397,81 @@
   });
 
   // ═══════════════════════════════════════════════════════════════
+  // JWT DECODE (for popup-side token extraction fallback)
+  // ═══════════════════════════════════════════════════════════════
+
+  function decodeJWTPayload(token) {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+      return JSON.parse(atob(padded));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Fallback: check active tab URL for extensionToken param.
+   * This handles the case where the service worker missed the
+   * chrome.tabs.onUpdated event (e.g. old SW code was cached).
+   * Also re-checks storage in case SW stored it between popup close/open.
+   */
+  function tryExtractTokenFromTab() {
+    return new Promise((resolve) => {
+      // First: re-check storage (SW may have stored it while popup was closed)
+      chrome.storage.local.get(['authSession'], (result) => {
+        if (result.authSession && result.authSession.token) {
+          authSession = result.authSession;
+          resolve(true);
+          return;
+        }
+
+        // Second: check active tab URL for extensionToken
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (!tabs || !tabs[0] || !tabs[0].url) {
+            resolve(false);
+            return;
+          }
+          try {
+            const url = new URL(tabs[0].url);
+            const token = url.searchParams.get('extensionToken');
+            if (!token) {
+              resolve(false);
+              return;
+            }
+
+            const payload = decodeJWTPayload(token);
+            if (!payload || !payload.sub) {
+              resolve(false);
+              return;
+            }
+
+            // Store the auth session
+            authSession = {
+              token: token,
+              user: {
+                id: payload.sub,
+                email: payload.email || '',
+                name: payload.name || '',
+                picture: payload.picture || null
+              },
+              linkedAt: Date.now()
+            };
+            chrome.storage.local.set({ authSession, skipLogin: false }, () => {
+              console.log('[PromptPro Popup] Extracted token from active tab for:', payload.email);
+              resolve(true);
+            });
+          } catch (e) {
+            resolve(false);
+          }
+        });
+      });
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   // INITIALIZATION
   // ═══════════════════════════════════════════════════════════════
 
@@ -412,14 +487,24 @@
       updateHeaderForAuth();
       // Fetch and merge cloud data in the background
       mergeCloudAndLocal();
-    } else if (!skipLogin) {
-      // Show login screen on first use / not skipped
-      showAuthScreen();
-      if (headerSignInBtn) headerSignInBtn.style.display = 'none';
     } else {
-      // User skipped login — show sign-in button in header
-      hideAuthScreen();
-      if (headerSignInBtn) headerSignInBtn.style.display = 'flex';
+      // Not authenticated — try fallback: check active tab for extensionToken
+      tryExtractTokenFromTab().then((extracted) => {
+        if (extracted) {
+          // Token found and stored — update UI
+          hideAuthScreen();
+          updateHeaderForAuth();
+          mergeCloudAndLocal();
+        } else if (!skipLogin) {
+          // Show login screen on first use / not skipped
+          showAuthScreen();
+          if (headerSignInBtn) headerSignInBtn.style.display = 'none';
+        } else {
+          // User skipped login — show sign-in button in header
+          hideAuthScreen();
+          if (headerSignInBtn) headerSignInBtn.style.display = 'flex';
+        }
+      });
     }
 
     // ── Settings Initialization (unchanged logic) ──
