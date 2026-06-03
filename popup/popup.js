@@ -9,7 +9,7 @@
   // CONSTANTS & CONFIG
   // ═══════════════════════════════════════════════════════════════
 
-  const API_BASE = 'https://prompt-pro-liart.vercel.app';
+  const API_BASE = 'http://localhost:3000'; // Change to https://prompt-pro-liart.vercel.app for production
 
   const DEFAULT_SETTINGS = {
     defaultStrategy: 'enhance',
@@ -254,8 +254,8 @@
   // ═══════════════════════════════════════════════════════════════
 
   function startLogin() {
-    // Open the web app auth bridge — service worker watches for the callback
-    chrome.tabs.create({ url: `${API_BASE}/extension-auth` });
+    // Open the web app dashboard — ExtensionSync will broadcast the token
+    chrome.tabs.create({ url: `${API_BASE}/dashboard` });
     // Popup will close when the tab opens. When user reopens, auth will be loaded from storage.
   }
 
@@ -270,6 +270,17 @@
 
     authSession = null;
     await new Promise((resolve) => chrome.storage.local.remove(['authSession', 'skipLogin'], resolve));
+
+    // Sign out from the dashboard: redirect existing tab if open, otherwise use a temporary background tab
+    chrome.tabs.query({ url: ['*://prompt-pro-liart.vercel.app/*', '*://localhost:3000/*'] }, (tabs) => {
+      if (tabs && tabs.length > 0) {
+        chrome.tabs.update(tabs[0].id, { url: `${API_BASE}/signout` });
+      } else {
+        chrome.tabs.create({ url: `${API_BASE}/signout`, active: false }, (tab) => {
+          setTimeout(() => chrome.tabs.remove(tab.id), 3000);
+        });
+      }
+    });
 
     updateHeaderForAuth();
     // Show the login screen again

@@ -978,6 +978,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'SYNC_CLERK_TOKEN') {
+    const { token, user } = message.payload || {};
+    if (token && user) {
+      chrome.storage.local.get(['authSession'], (result) => {
+        const oldSession = result.authSession;
+        if (oldSession && oldSession.token === token) {
+          // Token is the same, do nothing to prevent infinite onChanged loops
+          sendResponse({ success: true });
+          return;
+        }
+
+        const authSession = {
+          token: token,
+          user: user,
+          linkedAt: Date.now()
+        };
+        chrome.storage.local.set({ authSession, skipLogin: false }, () => {
+          console.log('[PromptPro] Extension synced with Clerk session for:', user.email);
+        });
+        sendResponse({ success: true });
+      });
+    } else {
+      sendResponse({ error: 'Missing token or user' });
+    }
+    return true;
+  }
+
+  if (message.type === 'CLEAR_AUTH_SESSION') {
+    chrome.storage.local.remove(['authSession'], () => {
+      console.log('[PromptPro] Extension auth session cleared by dashboard logout');
+      sendResponse({ success: true });
+    });
+    return true;
+  }
+
   return false;
 });
 

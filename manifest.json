@@ -19,6 +19,14 @@
       "js": ["content/main.js"],
       "css": ["styles/injected.css"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "https://prompt-pro-liart.vercel.app/*"
+      ],
+      "js": ["content/auth-sync.js"],
+      "run_at": "document_idle"
     }
   ],
   "action": {
@@ -35,7 +43,8 @@
     "https://claude.ai/*",
     "https://gemini.google.com/*",
     "https://*.perplexity.ai/*",
-    "https://prompt-pro-liart.vercel.app/*"
+    "https://prompt-pro-liart.vercel.app/*",
+    "http://localhost:3000/*"
   ],
   "icons": {
     "16": "icons/icon16.png",
