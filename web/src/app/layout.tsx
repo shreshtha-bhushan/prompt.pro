@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import { Auth0Provider } from '@auth0/nextjs-auth0';
+import { ClerkProvider } from '@clerk/nextjs'
 import "./globals.css";
+
+import { ExtensionSync } from "@/components/extension-sync";
 
 export const metadata: Metadata = {
   title: "PromptPro Web",
@@ -13,12 +15,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <Auth0Provider>
+    <ClerkProvider
+      appearance={{
+        baseTheme: undefined, // Let our globals.css override, but we could use dark theme here
+        variables: {
+          colorPrimary: 'white',
+          colorBackground: '#111113',
+          colorText: 'white',
+          colorTextSecondary: '#888888',
+        }
+      }}
+    >
+      <html lang="en" className="dark">
         <body className="min-h-screen bg-[#050505] text-white antialiased selection:bg-white/10 selection:text-white">
+          <ExtensionSync />
           {children}
         </body>
-      </Auth0Provider>
-    </html>
+      </html>
+    </ClerkProvider>
   );
 }

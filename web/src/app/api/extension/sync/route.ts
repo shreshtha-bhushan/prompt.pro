@@ -1,241 +1,182 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-import { verifyExtensionToken } from '@/lib/jwt';
+import { auth } from '@clerk/nextjs/server';
+import { createClient } from '@supabase/supabase-js';
+import { clerkToUuid } from '@/lib/utils'; // Keeping import just in case, but unused here
 
-/* ─── CORS Headers ────────────────────────────────────────── */
-const CORS = {
+function createSupabaseClient(clerkToken: string | null) {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      global: {
+        headers: clerkToken ? { Authorization: `Bearer ${clerkToken}` } : undefined,
+      },
+    }
+  );
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
+}
+
+const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-/* ─── Auth Helper ─────────────────────────────────────────── */
-function getAuthUser(request: Request) {
-  const auth = request.headers.get('Authorization');
-  if (!auth?.startsWith('Bearer ')) {
-    throw new Error('Missing or malformed auth token');
-  }
-  const payload = verifyExtensionToken(auth.slice(7));
-  if (!payload.sub || typeof payload.sub !== 'string') {
-    throw new Error('Invalid token payload');
-  }
-  return payload as {
-    sub: string;
-    email: string;
-    name: string | null;
-    picture: string | null;
-  };
-}
-
-/* ─── OPTIONS (CORS preflight) ────────────────────────────── */
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: CORS });
-}
-
-/* ─── GET — Fetch all user data for the extension ─────────── */
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const user = getAuthUser(request);
-
-    const [history, library, contextBlocks] = await Promise.all([
-      prisma.historyItem.findMany({
-        where: { userId: user.sub },
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.libraryItem.findMany({
-        where: { userId: user.sub },
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.contextBlock.findMany({
-        where: { userId: user.sub },
-        orderBy: { createdAt: 'asc' },
-      }),
-    ]);
-
-    return NextResponse.json(
-      {
-        success: true,
-        user: { id: user.sub, email: user.email, name: user.name, picture: user.picture },
-        history,
-        library,
-        contextBlocks,
-      },
-      { headers: CORS }
-    );
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    const status = message.includes('token') || message.includes('auth') ? 401 : 500;
-    return NextResponse.json({ error: message }, { status, headers: CORS });
-  }
-}
-
-/* ─── POST — Write operations from the extension ──────────── */
-export async function POST(request: Request) {
-  try {
-    const user = getAuthUser(request);
-    const body = await request.json();
-    const { action, ...data } = body;
-
-    let result: unknown;
-
-    switch (action) {
-      /* ── History ────────────────────────── */
-      case 'addHistory':
-        if (!data.text?.trim()) {
-          return NextResponse.json({ error: 'Text is required' }, { status: 400, headers: CORS });
-        }
-        result = await prisma.historyItem.create({
-          data: {
-            userId: user.sub,
-            text: data.text.trim(),
-            score: data.score ?? null,
-          },
-        });
-        break;
-
-      case 'clearHistory':
-        await prisma.historyItem.deleteMany({ where: { userId: user.sub } });
-        result = { cleared: true };
-        break;
-
-      /* ── Library ────────────────────────── */
-      case 'saveLibrary':
-        if (!data.title?.trim() || !data.text?.trim()) {
-          return NextResponse.json(
-            { error: 'Title and text are required' },
-            { status: 400, headers: CORS }
-          );
-        }
-        result = await prisma.libraryItem.create({
-          data: {
-            userId: user.sub,
-            title: data.title.trim(),
-            text: data.text.trim(),
-          },
-        });
-        break;
-
-      case 'deleteLibrary':
-        if (!data.id) {
-          return NextResponse.json({ error: 'ID is required' }, { status: 400, headers: CORS });
-        }
-        await prisma.libraryItem.deleteMany({
-          where: { id: data.id, userId: user.sub },
-        });
-        result = { deleted: true };
-        break;
-
-      /* ── Context Blocks ─────────────────── */
-      case 'addContext':
-        if (!data.title?.trim() || !data.content?.trim()) {
-          return NextResponse.json(
-            { error: 'Title and content are required' },
-            { status: 400, headers: CORS }
-          );
-        }
-        result = await prisma.contextBlock.create({
-          data: {
-            userId: user.sub,
-            title: data.title.trim(),
-            content: data.content.trim(),
-            active: false,
-          },
-        });
-        break;
-
-      case 'deleteContext':
-        if (!data.id) {
-          return NextResponse.json({ error: 'ID is required' }, { status: 400, headers: CORS });
-        }
-        await prisma.contextBlock.deleteMany({
-          where: { id: data.id, userId: user.sub },
-        });
-        result = { deleted: true };
-        break;
-
-      case 'toggleContext':
-        if (!data.id) {
-          return NextResponse.json({ error: 'ID is required' }, { status: 400, headers: CORS });
-        }
-        await prisma.contextBlock.updateMany({
-          where: { id: data.id, userId: user.sub },
-          data: { active: !!data.active },
-        });
-        result = { toggled: true };
-        break;
-
-      /* ── Bulk Merge (push local → cloud) ── */
-      case 'bulkMerge': {
-        const created: { history: number; library: number; context: number } = {
-          history: 0,
-          library: 0,
-          context: 0,
-        };
-
-        // Merge history items
-        if (Array.isArray(data.history)) {
-          for (const item of data.history) {
-            if (item.text?.trim()) {
-              await prisma.historyItem.create({
-                data: {
-                  userId: user.sub,
-                  text: item.text.trim(),
-                  score: item.score ?? null,
-                },
-              });
-              created.history++;
-            }
-          }
-        }
-
-        // Merge library items
-        if (Array.isArray(data.library)) {
-          for (const item of data.library) {
-            if (item.title?.trim() && item.text?.trim()) {
-              await prisma.libraryItem.create({
-                data: {
-                  userId: user.sub,
-                  title: item.title.trim(),
-                  text: item.text.trim(),
-                },
-              });
-              created.library++;
-            }
-          }
-        }
-
-        // Merge context blocks
-        if (Array.isArray(data.contextBlocks)) {
-          for (const block of data.contextBlocks) {
-            if (block.title?.trim() && block.content?.trim()) {
-              await prisma.contextBlock.create({
-                data: {
-                  userId: user.sub,
-                  title: block.title.trim(),
-                  content: block.content.trim(),
-                  active: !!block.active,
-                },
-              });
-              created.context++;
-            }
-          }
-        }
-
-        result = { merged: true, created };
-        break;
-      }
-
-      default:
-        return NextResponse.json(
-          { error: `Unknown action: ${action}` },
-          { status: 400, headers: CORS }
-        );
+    const { userId, getToken } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
     }
 
-    return NextResponse.json({ success: true, result }, { headers: CORS });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    const status = message.includes('token') || message.includes('auth') ? 401 : 500;
-    return NextResponse.json({ error: message }, { status, headers: CORS });
+    const supabaseToken = await getToken({ template: 'supabase' });
+    const supabase = createSupabaseClient(supabaseToken);
+    
+    const uuid = userId; // Database now natively accepts the string userId
+
+    // Fetch data from 'optimization_logs' for history
+    const { data: logs, error: logsError } = await supabase
+      .from('optimization_logs')
+      .select('*')
+      .eq('user_id', uuid)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    // Fetch data from 'snippets' for library and context
+    const { data: snippets, error: snippetsError } = await supabase
+      .from('snippets')
+      .select('*')
+      .eq('user_id', uuid)
+      .order('created_at', { ascending: false });
+
+    if (logsError || snippetsError) {
+      console.error('[Sync GET DB Error]', logsError || snippetsError);
+    }
+
+    const history = (logs || []).map(log => ({
+      id: log.id,
+      text: log.upgraded_prompt,
+      score: log.score_after,
+      createdAt: log.created_at
+    }));
+
+    const library = (snippets || []).filter(s => s.type === 'snippet').map(s => ({
+      id: s.id,
+      title: s.title,
+      text: s.content,
+      createdAt: s.created_at
+    }));
+
+    const contextBlocks = (snippets || []).filter(s => s.type === 'context').map(s => ({
+      id: s.id,
+      title: s.title,
+      content: s.content,
+      active: false,
+      createdAt: s.created_at
+    }));
+
+    return NextResponse.json({
+      success: true,
+      history,
+      library,
+      contextBlocks
+    }, { headers: corsHeaders });
+  } catch (error: any) {
+    console.error('[Sync GET Error]', error);
+    return NextResponse.json({ error: error.message || 'Server error' }, { status: 500, headers: corsHeaders });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const { userId, getToken } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: corsHeaders });
+    }
+
+    const supabaseToken = await getToken({ template: 'supabase' });
+    const supabase = createSupabaseClient(supabaseToken);
+    
+    const uuid = userId; // Database now natively accepts the string userId
+
+    const data = await request.json();
+    const action = data.action;
+
+    if (action === 'bulkMerge') {
+      const { history = [], library = [], contextBlocks = [] } = data;
+
+      // 1. Merge History
+      if (history.length > 0) {
+        // Fetch existing texts to prevent duplicates
+        const { data: existingLogs } = await supabase
+          .from('optimization_logs')
+          .select('upgraded_prompt')
+          .eq('user_id', uuid);
+        
+        const existingTexts = new Set((existingLogs || []).map(l => l.upgraded_prompt));
+        const newLogs = history.filter((h: any) => !existingTexts.has(h.text)).map((h: any) => ({
+          user_id: uuid,
+          original_prompt: "Synced from Extension",
+          upgraded_prompt: h.text,
+          score_before: 0,
+          score_after: h.score || 0,
+          site: "extension",
+          strategy: "enhance"
+        }));
+
+        if (newLogs.length > 0) {
+          await supabase.from('optimization_logs').insert(newLogs);
+        }
+      }
+
+      // 2. Merge Library & Context Blocks
+      const newSnippets = [];
+      
+      const { data: existingSnippets } = await supabase
+        .from('snippets')
+        .select('title, content, type')
+        .eq('user_id', uuid);
+        
+      const snippetSet = new Set((existingSnippets || []).map(s => `${s.type}:${s.title}:${s.content}`));
+
+      for (const l of library) {
+        if (!snippetSet.has(`snippet:${l.title}:${l.text}`)) {
+          newSnippets.push({ user_id: uuid, title: l.title, content: l.text, type: 'snippet' });
+        }
+      }
+
+      for (const c of contextBlocks) {
+        if (!snippetSet.has(`context:${c.title}:${c.content}`)) {
+          newSnippets.push({ user_id: uuid, title: c.title, content: c.content, type: 'context' });
+        }
+      }
+
+      if (newSnippets.length > 0) {
+        await supabase.from('snippets').insert(newSnippets);
+      }
+
+      return NextResponse.json({ success: true }, { headers: corsHeaders });
+    }
+
+    if (action === 'clearHistory') {
+      await supabase.from('optimization_logs').delete().eq('user_id', uuid);
+      return NextResponse.json({ success: true }, { headers: corsHeaders });
+    }
+
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400, headers: corsHeaders });
+
+  } catch (error: any) {
+    console.error('[Sync POST Error]', error);
+    return NextResponse.json({ error: error.message || 'Server error' }, { status: 500, headers: corsHeaders });
   }
 }
