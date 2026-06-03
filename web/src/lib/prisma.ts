@@ -7,7 +7,10 @@ const prismaClientSingleton = () => {
     || process.env.POSTGRES_PRISMA_URL
     || process.env.POSTGRES_URL
     || 'postgresql://dummy:dummy@localhost:5432/dummy';
-  const pool = new Pool({ connectionString: url });
+  const pool = new Pool({
+    connectionString: url,
+    ssl: url.includes('localhost') ? false : { rejectUnauthorized: false },
+  });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter });
 };

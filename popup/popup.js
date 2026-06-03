@@ -269,11 +269,12 @@
     if (!ok) return;
 
     authSession = null;
-    await new Promise((resolve) => chrome.storage.local.remove(['authSession'], resolve));
+    await new Promise((resolve) => chrome.storage.local.remove(['authSession', 'skipLogin'], resolve));
 
     updateHeaderForAuth();
-    // Show sign-in button in header for re-login
-    if (headerSignInBtn) headerSignInBtn.style.display = 'flex';
+    // Show the login screen again
+    showAuthScreen();
+    if (headerSignInBtn) headerSignInBtn.style.display = 'none';
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -572,7 +573,8 @@
   });
 
   headerSignInBtn?.addEventListener('click', () => {
-    startLogin();
+    showAuthScreen();
+    if (headerSignInBtn) headerSignInBtn.style.display = 'none';
   });
 
   headerSignOutBtn?.addEventListener('click', () => {
