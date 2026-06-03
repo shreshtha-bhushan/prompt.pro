@@ -1001,10 +1001,8 @@ chrome.runtime.onInstalled.addListener((details) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// AUTH CALLBACK — Watch for extension-linked page with token
+// AUTH CALLBACK — Watch for dashboard URL with extensionToken param
 // ═══════════════════════════════════════════════════════════════
-
-const AUTH_CALLBACK_PATTERN = '/extension-linked?token=';
 
 function decodeJWTPayload(token) {
   try {
@@ -1022,16 +1020,18 @@ function decodeJWTPayload(token) {
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  // Only react when the tab finishes loading and has a URL
   if (changeInfo.status !== 'complete') return;
   if (!tab.url) return;
 
-  const tokenIdx = tab.url.indexOf(AUTH_CALLBACK_PATTERN);
-  if (tokenIdx === -1) return;
-
-  // Extract the token from the URL
-  const token = tab.url.substring(tokenIdx + AUTH_CALLBACK_PATTERN.length).split('&')[0].split('#')[0];
-  if (!token) return;
+  let token = null;
+  try {
+    const url = new URL(tab.url);
+    if (!url.hostname.includes('prompt-pro') && !url.hostname.includes('localhost')) return;
+    token = url.searchParams.get('extensionToken') || url.searchParams.get('token');
+    if (!token) return;
+  } catch (e) {
+    return;
+  }
 
   console.log('[PromptPro] Auth callback detected — linking extension...');
 
@@ -1041,7 +1041,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     return;
   }
 
-  // Store the auth session
   const authSession = {
     token: token,
     user: {
@@ -1055,10 +1054,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
   chrome.storage.local.set({ authSession, skipLogin: false }, () => {
     console.log('[PromptPro] Extension linked successfully for:', payload.email);
-
-    // Close the callback tab after a short delay
-    setTimeout(() => {
-      chrome.tabs.remove(tabId).catch(() => {});
-    }, 1500);
+    // Do NOT close the tab — user stays on the PromptPro dashboard
   });
 });
+

@@ -255,7 +255,7 @@
 
   function startLogin() {
     // Open the web app auth bridge — service worker watches for the callback
-    chrome.tabs.create({ url: `${API_BASE}/extension-auth` });
+    chrome.tabs.create({ url: `${API_BASE}/api/extension/auth` });
     // Popup will close when the tab opens. When user reopens, auth will be loaded from storage.
   }
 
