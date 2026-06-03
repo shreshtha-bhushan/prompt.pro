@@ -1,8 +1,15 @@
 /**
- * PromptPro Popup — settings + History / Library / Context pipelines (chrome.storage.local + service worker)
+ * PromptPro Popup — settings + History / Library / Context pipelines
+ * Phase 5: Authentication + Cloud Sync + Data Merge
  */
 (function () {
   'use strict';
+
+  // ═══════════════════════════════════════════════════════════════
+  // CONSTANTS & CONFIG
+  // ═══════════════════════════════════════════════════════════════
+
+  const API_BASE = 'https://prompt-pro-liart.vercel.app';
 
   const DEFAULT_SETTINGS = {
     defaultStrategy: 'enhance',
@@ -18,6 +25,10 @@
     customModel: '',
     autocompleteEnabled: true
   };
+
+  // ═══════════════════════════════════════════════════════════════
+  // DOM REFERENCES
+  // ═══════════════════════════════════════════════════════════════
 
   const enabledToggle = document.getElementById('enabled-toggle');
   const scoreToggle = document.getElementById('score-toggle');
@@ -48,12 +59,227 @@
 
   const contextAddBtn = document.getElementById('context-add-btn');
 
-  let promptDb = null;
+  // Auth elements
+  const authScreen = document.getElementById('auth-screen');
+  const authSignInBtn = document.getElementById('auth-sign-in');
+  const authSkipBtn = document.getElementById('auth-skip');
+  const headerSubtitle = document.getElementById('header-subtitle');
+  const headerUserRow = document.getElementById('header-user-row');
+  const headerUserAvatar = document.getElementById('header-user-avatar');
+  const headerUserEmail = document.getElementById('header-user-email');
+  const headerSignInBtn = document.getElementById('header-signin-btn');
+  const headerSignOutBtn = document.getElementById('header-signout-btn');
+  const syncBar = document.getElementById('sync-bar');
+  const syncText = document.getElementById('sync-text');
 
-  /**
-   * Bottom-sheet confirmation (shadcn/vaul-style UX without React).
-   * For the full React + Tailwind implementation see web/src/components/ui/confirm-drawer.tsx
-   */
+  let promptDb = null;
+  let authSession = null; // { token, user: { id, email, name, picture }, linkedAt }
+
+  // ═══════════════════════════════════════════════════════════════
+  // AUTH STATE MANAGEMENT
+  // ═══════════════════════════════════════════════════════════════
+
+  function isAuthenticated() {
+    return authSession && authSession.token;
+  }
+
+  function showAuthScreen() {
+    if (authScreen) authScreen.style.display = 'flex';
+  }
+
+  function hideAuthScreen() {
+    if (authScreen) authScreen.style.display = 'none';
+  }
+
+  function updateHeaderForAuth() {
+    if (isAuthenticated()) {
+      // Show user info in header
+      if (headerSubtitle) headerSubtitle.style.display = 'none';
+      if (headerUserRow) {
+        headerUserRow.style.display = 'flex';
+        if (headerUserAvatar && authSession.user.picture) {
+          headerUserAvatar.src = authSession.user.picture;
+          headerUserAvatar.style.display = 'block';
+        } else if (headerUserAvatar) {
+          headerUserAvatar.style.display = 'none';
+        }
+        if (headerUserEmail) {
+          headerUserEmail.textContent = authSession.user.email || '';
+        }
+      }
+      if (headerSignInBtn) headerSignInBtn.style.display = 'none';
+      if (headerSignOutBtn) headerSignOutBtn.style.display = 'flex';
+      if (syncBar) syncBar.style.display = 'flex';
+    } else {
+      // Show default subtitle
+      if (headerSubtitle) headerSubtitle.style.display = 'block';
+      if (headerUserRow) headerUserRow.style.display = 'none';
+      if (headerSignOutBtn) headerSignOutBtn.style.display = 'none';
+      if (syncBar) syncBar.style.display = 'none';
+    }
+  }
+
+  function updateSyncStatus(status, text) {
+    if (!syncBar || !syncText) return;
+    syncBar.classList.remove('popup__sync-bar--syncing', 'popup__sync-bar--error');
+    if (status === 'syncing') syncBar.classList.add('popup__sync-bar--syncing');
+    if (status === 'error') syncBar.classList.add('popup__sync-bar--error');
+    syncText.textContent = text || 'Synced';
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // CLOUD API CALLS
+  // ═══════════════════════════════════════════════════════════════
+
+  async function cloudFetch(path, options = {}) {
+    if (!isAuthenticated()) return null;
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authSession.token}`,
+      ...(options.headers || {})
+    };
+    try {
+      const resp = await fetch(`${API_BASE}${path}`, { ...options, headers });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+      return await resp.json();
+    } catch (err) {
+      console.warn('[PromptPro Cloud]', err.message);
+      return null;
+    }
+  }
+
+  async function fetchCloudData() {
+    return cloudFetch('/api/extension/sync');
+  }
+
+  async function cloudWrite(action, data) {
+    return cloudFetch('/api/extension/sync', {
+      method: 'POST',
+      body: JSON.stringify({ action, ...data })
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // DATA MERGE — Cloud + Local
+  // ═══════════════════════════════════════════════════════════════
+
+  async function mergeCloudAndLocal() {
+    if (!isAuthenticated()) return;
+
+    updateSyncStatus('syncing', 'Syncing…');
+
+    const cloudData = await fetchCloudData();
+    if (!cloudData || !cloudData.success) {
+      updateSyncStatus('error', 'Sync failed');
+      return;
+    }
+
+    // Get current local data
+    const localDb = promptDb || { history: [], library: [], contextBlocks: [] };
+
+    // Find local-only items to push to cloud
+    const cloudHistoryTexts = new Set((cloudData.history || []).map(h => h.text));
+    const localOnlyHistory = (localDb.history || []).filter(h => !cloudHistoryTexts.has(h.text));
+
+    const cloudLibraryKeys = new Set((cloudData.library || []).map(l => `${l.title}||${l.text}`));
+    const localOnlyLibrary = (localDb.library || []).filter(l => !cloudLibraryKeys.has(`${l.title}||${l.text}`));
+
+    const cloudContextKeys = new Set((cloudData.contextBlocks || []).map(c => `${c.title}||${c.content}`));
+    const localOnlyContext = (localDb.contextBlocks || []).filter(c => !cloudContextKeys.has(`${c.title}||${c.content}`));
+
+    // Push local-only items to cloud (bulk merge)
+    const hasLocalOnly = localOnlyHistory.length > 0 || localOnlyLibrary.length > 0 || localOnlyContext.length > 0;
+    if (hasLocalOnly) {
+      await cloudWrite('bulkMerge', {
+        history: localOnlyHistory.map(h => ({ text: h.text, score: h.score })),
+        library: localOnlyLibrary.map(l => ({ title: l.title, text: l.text })),
+        contextBlocks: localOnlyContext.map(c => ({ title: c.title, content: c.content, active: c.active }))
+      });
+    }
+
+    // Build merged local DB (cloud data is source of truth + local-only items appended)
+    const mergedHistory = [
+      ...(cloudData.history || []).map(h => ({
+        id: h.id,
+        text: h.text,
+        score: h.score,
+        timestamp: new Date(h.createdAt).getTime()
+      })),
+      ...localOnlyHistory
+    ].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    const mergedLibrary = [
+      ...(cloudData.library || []).map(l => ({
+        id: l.id,
+        title: l.title,
+        text: l.text,
+        tags: l.tags || []
+      })),
+      ...localOnlyLibrary
+    ];
+
+    const mergedContext = [
+      ...(cloudData.contextBlocks || []).map(c => ({
+        id: c.id,
+        title: c.title,
+        content: c.content,
+        active: c.active
+      })),
+      ...localOnlyContext
+    ];
+
+    // Update local DB with merged data
+    promptDb = {
+      ...localDb,
+      history: mergedHistory,
+      library: mergedLibrary,
+      contextBlocks: mergedContext,
+      historyLimit: localDb.historyLimit || 50
+    };
+
+    await new Promise((resolve) => chrome.storage.local.set({ promptDb }, resolve));
+
+    renderTabContent('history');
+    renderTabContent('library');
+    renderTabContent('context');
+
+    updateSyncStatus('synced', 'Synced');
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // AUTH FLOW — Sign In / Sign Out
+  // ═══════════════════════════════════════════════════════════════
+
+  function startLogin() {
+    // Open the web app auth bridge — service worker watches for the callback
+    chrome.tabs.create({ url: `${API_BASE}/extension-auth` });
+    // Popup will close when the tab opens. When user reopens, auth will be loaded from storage.
+  }
+
+  async function signOut() {
+    const ok = await showConfirmDrawer({
+      title: 'Sign Out?',
+      description: 'Your cloud data will remain safe. You can sign in again anytime.',
+      confirmLabel: 'Sign Out',
+      cancelLabel: 'Cancel'
+    });
+    if (!ok) return;
+
+    authSession = null;
+    await new Promise((resolve) => chrome.storage.local.remove(['authSession'], resolve));
+
+    updateHeaderForAuth();
+    // Show sign-in button in header for re-login
+    if (headerSignInBtn) headerSignInBtn.style.display = 'flex';
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // CONFIRM DRAWER (unchanged from original)
+  // ═══════════════════════════════════════════════════════════════
+
   function showConfirmDrawer(options) {
     return new Promise((resolve) => {
       const root = document.getElementById('confirm-drawer-root');
@@ -89,7 +315,6 @@
           active.blur();
         }
 
-        // Never set aria-hidden while a descendant still has focus (Chrome a11y).
         requestAnimationFrame(() => {
           root.setAttribute('aria-hidden', 'true');
           if ('inert' in root) root.inert = true;
@@ -98,18 +323,10 @@
         });
       }
 
-      function onOk() {
-        finish(true);
-      }
-      function onCancel() {
-        finish(false);
-      }
-      function onBackdrop() {
-        finish(false);
-      }
-      function onKey(e) {
-        if (e.key === 'Escape') finish(false);
-      }
+      function onOk() { finish(true); }
+      function onCancel() { finish(false); }
+      function onBackdrop() { finish(false); }
+      function onKey(e) { if (e.key === 'Escape') finish(false); }
 
       if ('inert' in root) root.inert = false;
       else root.removeAttribute('inert');
@@ -117,11 +334,7 @@
       requestAnimationFrame(() => {
         root.classList.add('confirm-drawer--open');
         setTimeout(() => {
-          try {
-            okBtn.focus();
-          } catch (e) {
-            /* ignore */
-          }
+          try { okBtn.focus(); } catch (e) { /* ignore */ }
         }, 50);
       });
 
@@ -131,6 +344,10 @@
       document.addEventListener('keydown', onKey);
     });
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // SERVICE WORKER MESSAGING
+  // ═══════════════════════════════════════════════════════════════
 
   function sendBackground(type, payload) {
     return new Promise((resolve, reject) => {
@@ -154,18 +371,58 @@
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // STORAGE CHANGE LISTENER
+  // ═══════════════════════════════════════════════════════════════
+
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes.promptDb) return;
-    mergeDb(changes.promptDb.newValue);
-    renderTabContent('history');
-    renderTabContent('library');
-    renderTabContent('context');
+    if (area !== 'local') return;
+
+    // React to auth session changes (e.g., service worker stored a new token)
+    if (changes.authSession) {
+      authSession = changes.authSession.newValue || null;
+      hideAuthScreen();
+      updateHeaderForAuth();
+      if (isAuthenticated()) {
+        mergeCloudAndLocal();
+      }
+    }
+
+    if (changes.promptDb) {
+      mergeDb(changes.promptDb.newValue);
+      renderTabContent('history');
+      renderTabContent('library');
+      renderTabContent('context');
+    }
   });
 
-  chrome.storage.local.get(['settings', 'promptDb'], (result) => {
+  // ═══════════════════════════════════════════════════════════════
+  // INITIALIZATION
+  // ═══════════════════════════════════════════════════════════════
+
+  chrome.storage.local.get(['settings', 'promptDb', 'authSession', 'skipLogin'], (result) => {
     const settings = { ...DEFAULT_SETTINGS, ...result.settings };
     promptDb = result.promptDb || { history: [], library: [], contextBlocks: [], historyLimit: 50 };
+    authSession = result.authSession || null;
+    const skipLogin = result.skipLogin || false;
 
+    // ── Auth UI State ──
+    if (isAuthenticated()) {
+      hideAuthScreen();
+      updateHeaderForAuth();
+      // Fetch and merge cloud data in the background
+      mergeCloudAndLocal();
+    } else if (!skipLogin) {
+      // Show login screen on first use / not skipped
+      showAuthScreen();
+      if (headerSignInBtn) headerSignInBtn.style.display = 'none';
+    } else {
+      // User skipped login — show sign-in button in header
+      hideAuthScreen();
+      if (headerSignInBtn) headerSignInBtn.style.display = 'flex';
+    }
+
+    // ── Settings Initialization (unchanged logic) ──
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       let siteId = null;
       if (tabs && tabs[0] && tabs[0].url) {
@@ -176,7 +433,6 @@
         else if (url.includes('perplexity.ai')) siteId = 'perplexity';
       }
 
-      // If siteMemory is enabled and we are on a supported site, display that site's settings
       let activeToneValue = settings.defaultTone || 'professional';
       let activeStrategyValue = settings.defaultStrategy || 'enhance';
 
@@ -206,7 +462,6 @@
         activeToneItem.classList.add('popup__dropdown-item--active');
       }
 
-      // Load AI engine settings
       if (aiEngineToggle) {
         aiEngineToggle.checked = !!settings.openrouterEnabled;
       }
@@ -216,6 +471,32 @@
       renderTabContent('context');
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // AUTH EVENT LISTENERS
+  // ═══════════════════════════════════════════════════════════════
+
+  authSignInBtn?.addEventListener('click', () => {
+    startLogin();
+  });
+
+  authSkipBtn?.addEventListener('click', () => {
+    hideAuthScreen();
+    chrome.storage.local.set({ skipLogin: true });
+    if (headerSignInBtn) headerSignInBtn.style.display = 'flex';
+  });
+
+  headerSignInBtn?.addEventListener('click', () => {
+    startLogin();
+  });
+
+  headerSignOutBtn?.addEventListener('click', () => {
+    signOut();
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // SETTINGS PERSISTENCE
+  // ═══════════════════════════════════════════════════════════════
 
   function saveSettings(updates) {
     chrome.storage.local.get(['settings'], (result) => {
@@ -246,7 +527,6 @@
               settings.sites[siteId].defaultTone = updates.defaultTone;
             }
             
-            // Apply updates to the settings root object as well (keeps standard default / fallback)
             Object.assign(settings, updates);
           } else {
             Object.assign(settings, updates);
@@ -260,6 +540,10 @@
       }
     });
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // NAVIGATION
+  // ═══════════════════════════════════════════════════════════════
 
   function updateNavGlider(activeItem) {
     if (!navGlider || !activeItem) return;
@@ -295,6 +579,10 @@
       if (active) updateNavGlider(active);
     }, 200);
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // SETTINGS EVENT LISTENERS
+  // ═══════════════════════════════════════════════════════════════
 
   enabledToggle?.addEventListener('change', () => {
     saveSettings({ enabled: enabledToggle.checked });
@@ -340,7 +628,6 @@
     });
   });
 
-  // Toggle AI settings display on checkbox change
   aiEngineToggle?.addEventListener('change', () => {
     const enabled = aiEngineToggle.checked;
     saveSettings({ openrouterEnabled: enabled });
@@ -383,6 +670,10 @@
     saveSettings({ defaultTone: tone });
   });
 
+  // ═══════════════════════════════════════════════════════════════
+  // DATA ACTION HANDLERS (with cloud sync)
+  // ═══════════════════════════════════════════════════════════════
+
   historyClearBtn?.addEventListener('click', async () => {
     const ok = await showConfirmDrawer({
       title: 'Clear history?',
@@ -397,6 +688,10 @@
       const res = await sendBackground('CLEAR_HISTORY', {});
       if (res.promptDb) mergeDb(res.promptDb);
       renderTabContent('history');
+      // Also clear on cloud
+      if (isAuthenticated()) {
+        cloudWrite('clearHistory', {}).catch(() => {});
+      }
     } catch (err) {
       console.warn('[PromptPro]', err);
     }
@@ -419,6 +714,10 @@
       if (libraryText) libraryText.value = '';
       if (libraryTags) libraryTags.value = '';
       renderTabContent('library');
+      // Also save to cloud
+      if (isAuthenticated()) {
+        cloudWrite('saveLibrary', { title: title || 'Untitled', text }).catch(() => {});
+      }
     } catch (err) {
       console.warn('[PromptPro]', err);
     }
@@ -437,10 +736,18 @@
       if (ti) ti.value = '';
       if (tb) tb.value = '';
       renderTabContent('context');
+      // Also save to cloud
+      if (isAuthenticated()) {
+        cloudWrite('addContext', { title: title || 'Context', content }).catch(() => {});
+      }
     } catch (err) {
       console.warn('[PromptPro]', err);
     }
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // TAB CONTENT RENDERING (unchanged logic)
+  // ═══════════════════════════════════════════════════════════════
 
   function renderTabContent(tabId) {
     if (!promptDb) return;
@@ -559,6 +866,10 @@
             const res = await sendBackground('DELETE_LIBRARY_ENTRY', { id: item.id });
             if (res.promptDb) mergeDb(res.promptDb);
             renderTabContent('library');
+            // Also delete from cloud
+            if (isAuthenticated()) {
+              cloudWrite('deleteLibrary', { id: item.id }).catch(() => {});
+            }
           } catch (err) {
             console.warn('[PromptPro]', err);
           }
@@ -617,6 +928,10 @@
             });
             if (res.promptDb) mergeDb(res.promptDb);
             renderTabContent('context');
+            // Also toggle on cloud
+            if (isAuthenticated()) {
+              cloudWrite('toggleContext', { id: block.id, active: !block.active }).catch(() => {});
+            }
           } catch (err) {
             console.warn('[PromptPro]', err);
           }
@@ -640,6 +955,10 @@
             const res = await sendBackground('DELETE_CONTEXT_BLOCK', { id: block.id });
             if (res.promptDb) mergeDb(res.promptDb);
             renderTabContent('context');
+            // Also delete from cloud
+            if (isAuthenticated()) {
+              cloudWrite('deleteContext', { id: block.id }).catch(() => {});
+            }
           } catch (err) {
             console.warn('[PromptPro]', err);
           }

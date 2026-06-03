@@ -3,7 +3,7 @@
   "name": "PromptPro",
   "version": "1.0.0",
   "description": "Upgrade your prompts across ChatGPT, Claude, and Gemini — local-first, zero data leakage",
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage", "activeTab", "tabs"],
   "background": {
     "service_worker": "background/service-worker.js"
   },
@@ -34,7 +34,8 @@
     "https://chatgpt.com/*",
     "https://claude.ai/*",
     "https://gemini.google.com/*",
-    "https://*.perplexity.ai/*"
+    "https://*.perplexity.ai/*",
+    "https://prompt-pro-liart.vercel.app/*"
   ],
   "icons": {
     "16": "icons/icon16.png",

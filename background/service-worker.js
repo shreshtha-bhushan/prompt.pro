@@ -999,3 +999,66 @@ chrome.runtime.onInstalled.addListener((details) => {
     });
   }
 });
+
+// ═══════════════════════════════════════════════════════════════
+// AUTH CALLBACK — Watch for extension-linked page with token
+// ═══════════════════════════════════════════════════════════════
+
+const AUTH_CALLBACK_PATTERN = '/extension-linked?token=';
+
+function decodeJWTPayload(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    // Base64url decode the payload
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch (e) {
+    console.warn('[PromptPro] Failed to decode JWT payload:', e);
+    return null;
+  }
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // Only react when the tab finishes loading and has a URL
+  if (changeInfo.status !== 'complete') return;
+  if (!tab.url) return;
+
+  const tokenIdx = tab.url.indexOf(AUTH_CALLBACK_PATTERN);
+  if (tokenIdx === -1) return;
+
+  // Extract the token from the URL
+  const token = tab.url.substring(tokenIdx + AUTH_CALLBACK_PATTERN.length).split('&')[0].split('#')[0];
+  if (!token) return;
+
+  console.log('[PromptPro] Auth callback detected — linking extension...');
+
+  const payload = decodeJWTPayload(token);
+  if (!payload || !payload.sub) {
+    console.warn('[PromptPro] Invalid auth token payload');
+    return;
+  }
+
+  // Store the auth session
+  const authSession = {
+    token: token,
+    user: {
+      id: payload.sub,
+      email: payload.email || '',
+      name: payload.name || '',
+      picture: payload.picture || null
+    },
+    linkedAt: Date.now()
+  };
+
+  chrome.storage.local.set({ authSession, skipLogin: false }, () => {
+    console.log('[PromptPro] Extension linked successfully for:', payload.email);
+
+    // Close the callback tab after a short delay
+    setTimeout(() => {
+      chrome.tabs.remove(tabId).catch(() => {});
+    }, 1500);
+  });
+});
