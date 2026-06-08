@@ -269,12 +269,16 @@
     if (!ok) return;
 
     authSession = null;
+    await new Promise((resolve) => chrome.storage.local.set({ ignoreSyncUntil: Date.now() + 5000 }, resolve));
     await new Promise((resolve) => chrome.storage.local.remove(['authSession', 'skipLogin'], resolve));
 
     // Sign out from the dashboard: redirect existing tab if open, otherwise use a temporary background tab
     chrome.tabs.query({ url: ['*://prompt-pro-liart.vercel.app/*', '*://localhost:3000/*'] }, (tabs) => {
       if (tabs && tabs.length > 0) {
-        chrome.tabs.update(tabs[0].id, { url: `${API_BASE}/signout` });
+        tabs.forEach(tab => {
+          const origin = new URL(tab.url).origin;
+          chrome.tabs.update(tab.id, { url: `${origin}/signout` });
+        });
       } else {
         chrome.tabs.create({ url: `${API_BASE}/signout`, active: false }, (tab) => {
           setTimeout(() => chrome.tabs.remove(tab.id), 3000);

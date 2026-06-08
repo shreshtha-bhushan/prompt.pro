@@ -3,11 +3,13 @@ import { useAuth, useUser } from "@clerk/nextjs"
 import { useEffect } from "react"
 
 export function ExtensionSync() {
-  const { getToken } = useAuth()
-  const { user } = useUser()
+  const { getToken, isLoaded: isAuthLoaded } = useAuth()
+  const { user, isLoaded: isUserLoaded } = useUser()
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
+
+    if (!isAuthLoaded || !isUserLoaded) return;
 
     if (!user) {
       window.postMessage({ type: "PROMPT_PRO_SYNC_SIGNOUT" }, "*")

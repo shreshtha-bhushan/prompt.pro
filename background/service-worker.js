@@ -981,7 +981,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SYNC_CLERK_TOKEN') {
     const { token, user } = message.payload || {};
     if (token && user) {
-      chrome.storage.local.get(['authSession'], (result) => {
+      chrome.storage.local.get(['authSession', 'ignoreSyncUntil'], (result) => {
+        if (result.ignoreSyncUntil && Date.now() < result.ignoreSyncUntil) {
+          sendResponse({ success: false });
+          return;
+        }
+
         const oldSession = result.authSession;
         if (oldSession && oldSession.token === token) {
           // Token is the same, do nothing to prevent infinite onChanged loops
