@@ -130,7 +130,7 @@ export async function POST(request: Request) {
         const existingMap = new Map((existingLogs || []).map(l => [l.upgraded_prompt, l]));
         
         const newLogs: any[] = [];
-        const updatePromises: Promise<any>[] = [];
+        const updatePromises: any[] = [];
 
         for (const h of history) {
           const existing = existingMap.get(h.text);
