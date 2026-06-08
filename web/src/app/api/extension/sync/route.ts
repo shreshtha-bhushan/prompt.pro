@@ -126,12 +126,12 @@ export async function POST(request: Request) {
         const existingTexts = new Set((existingLogs || []).map(l => l.upgraded_prompt));
         const newLogs = history.filter((h: any) => !existingTexts.has(h.text)).map((h: any) => ({
           user_id: uuid,
-          original_prompt: "Synced from Extension",
+          original_prompt: h.originalText || "Synced from Extension",
           upgraded_prompt: h.text,
-          score_before: 0,
+          score_before: h.scoreBefore || 0,
           score_after: h.score || 0,
-          site: "extension",
-          strategy: "enhance"
+          site: h.site || "extension",
+          strategy: h.strategy || "enhance"
         }));
 
         if (newLogs.length > 0) {

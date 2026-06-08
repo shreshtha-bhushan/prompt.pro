@@ -24,7 +24,7 @@ export default function RootLayout({
               colorPrimary: 'white',
               colorBackground: '#111113',
               colorText: 'white',
-              colorTextSecondary: '#888888',
+              colorTextSecondary: '#a1a1aa',
             }
           }}
         >

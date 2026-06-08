@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { createClerkSupabaseClient } from "@/lib/supabase/client"
 import { ArrowRightIcon, CopyIcon, CheckIcon } from "lucide-react"
 
@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/pagination"
 
 export function HistoryClient({ userId, clerkToken }: { userId: string, clerkToken: string | null }) {
-  const supabase = createClerkSupabaseClient(clerkToken)
+  const supabase = useMemo(() => createClerkSupabaseClient(clerkToken), [clerkToken])
   
   const [logs, setLogs] = useState<any[]>([])
   const [totalCount, setTotalCount] = useState(0)

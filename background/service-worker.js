@@ -557,11 +557,20 @@ const PromptDatabase = {
     };
   },
 
-  async addHistory(text, score) {
+  async addHistory(text, score, originalText, scoreBefore, site, strategy) {
     const db = await this.getDB();
     // Prepend to history, ensure no exact consecutive duplicates
     if (db.history.length === 0 || db.history[0].text !== text) {
-      db.history.unshift({ id: `h_${Date.now()}`, text, score, timestamp: Date.now() });
+      db.history.unshift({ 
+        id: `h_${Date.now()}`, 
+        text, 
+        score, 
+        originalText: originalText || 'Synced from Extension',
+        scoreBefore: scoreBefore || 0,
+        site: site || 'extension',
+        strategy: strategy || 'enhance',
+        timestamp: Date.now() 
+      });
       if (db.history.length > db.historyLimit) db.history.pop();
       await chrome.storage.local.set({ promptDb: db });
     }
@@ -905,11 +914,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'ADD_HISTORY') {
-    const { text, score } = message.payload || {};
-    PromptDatabase.addHistory(text, score)
-      .then(() => sendResponse({ ok: true }))
-      .catch((e) => sendResponse({ error: e.message }));
-    return true;
+    const { text, score, originalText, scoreBefore, site, strategy } = message.payload || {};
+    if (text) {
+      PromptDatabase.addHistory(text, score, originalText, scoreBefore, site, strategy)
+        .then(() => sendResponse({ success: true }))
+        .catch(err => sendResponse({ error: err.message }));
+      return true;
+    }
   }
 
   if (message.type === 'CLEAR_HISTORY') {

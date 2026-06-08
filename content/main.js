@@ -796,7 +796,14 @@
         const recordHistoryAndToast = (finalText) => {
           chrome.runtime.sendMessage({
             type: 'ADD_HISTORY',
-            payload: { text: finalText, score: STATE.currentScore.after.total }
+            payload: { 
+              text: finalText, 
+              originalText: STATE.originalText,
+              score: STATE.currentScore.after.total,
+              scoreBefore: STATE.currentScore.before.total,
+              site: adapter.siteId,
+              strategy: STATE.settings?.sites?.[adapter.siteId]?.defaultStrategy || STATE.settings?.defaultStrategy || 'enhance'
+            }
           });
           showToast(`Prompt upgraded! (+${delta > 0 ? delta : 0})`, 'success');
         };

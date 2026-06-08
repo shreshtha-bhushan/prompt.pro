@@ -194,7 +194,14 @@
     const hasLocalOnly = localOnlyHistory.length > 0 || localOnlyLibrary.length > 0 || localOnlyContext.length > 0;
     if (hasLocalOnly) {
       await cloudWrite('bulkMerge', {
-        history: localOnlyHistory.map(h => ({ text: h.text, score: h.score })),
+        history: localOnlyHistory.map(h => ({ 
+          text: h.text, 
+          score: h.score,
+          originalText: h.originalText,
+          scoreBefore: h.scoreBefore,
+          site: h.site,
+          strategy: h.strategy
+        })),
         library: localOnlyLibrary.map(l => ({ title: l.title, text: l.text })),
         contextBlocks: localOnlyContext.map(c => ({ title: c.title, content: c.content, active: c.active }))
       });
