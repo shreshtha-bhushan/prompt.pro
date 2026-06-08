@@ -9,7 +9,7 @@
   // CONSTANTS & CONFIG
   // ═══════════════════════════════════════════════════════════════
 
-  const API_BASE = 'http://localhost:3000'; // Change to https://prompt-pro-liart.vercel.app for production
+  const API_BASE = 'https://prompt-pro-liart.vercel.app'; // Change to https://prompt-pro-liart.vercel.app for production
 
   const DEFAULT_SETTINGS = {
     defaultStrategy: 'enhance',

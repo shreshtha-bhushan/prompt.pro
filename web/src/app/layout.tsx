@@ -15,23 +15,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider
-      appearance={{
-        baseTheme: undefined, // Let our globals.css override, but we could use dark theme here
-        variables: {
-          colorPrimary: 'white',
-          colorBackground: '#111113',
-          colorText: 'white',
-          colorTextSecondary: '#888888',
-        }
-      }}
-    >
-      <html lang="en" className="dark">
-        <body className="min-h-screen bg-[#050505] text-white antialiased selection:bg-white/10 selection:text-white">
+    <html lang="en" className="dark">
+      <body className="min-h-screen bg-[#050505] text-white antialiased selection:bg-white/10 selection:text-white">
+        <ClerkProvider
+          appearance={{
+            baseTheme: undefined, // Let our globals.css override, but we could use dark theme here
+            variables: {
+              colorPrimary: 'white',
+              colorBackground: '#111113',
+              colorText: 'white',
+              colorTextSecondary: '#888888',
+            }
+          }}
+        >
           <ExtensionSync />
           {children}
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }
