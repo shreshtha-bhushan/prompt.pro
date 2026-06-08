@@ -190,11 +190,13 @@
     const cloudContextKeys = new Set((cloudData.contextBlocks || []).map(c => `${c.title}||${c.content}`));
     const localOnlyContext = (localDb.contextBlocks || []).filter(c => !cloudContextKeys.has(`${c.title}||${c.content}`));
 
-    // Push local-only items to cloud (bulk merge)
-    const hasLocalOnly = localOnlyHistory.length > 0 || localOnlyLibrary.length > 0 || localOnlyContext.length > 0;
-    if (hasLocalOnly) {
+    // Push items to cloud (bulk merge) — send ALL local history so the server
+    // can update stale records (e.g. site='extension') with correct site names
+    const allLocalHistory = (localDb.history || []);
+    const hasDataToSync = allLocalHistory.length > 0 || localOnlyLibrary.length > 0 || localOnlyContext.length > 0;
+    if (hasDataToSync) {
       await cloudWrite('bulkMerge', {
-        history: localOnlyHistory.map(h => ({ 
+        history: allLocalHistory.map(h => ({ 
           text: h.text, 
           score: h.score,
           originalText: h.originalText,
@@ -213,6 +215,10 @@
         id: h.id,
         text: h.text,
         score: h.score,
+        originalText: h.originalText,
+        scoreBefore: h.scoreBefore,
+        site: h.site,
+        strategy: h.strategy,
         timestamp: new Date(h.createdAt).getTime()
       })),
       ...localOnlyHistory
@@ -280,15 +286,24 @@
     await new Promise((resolve) => chrome.storage.local.remove(['authSession', 'skipLogin'], resolve));
 
     // Sign out from the dashboard: redirect existing tab if open, otherwise use a temporary background tab
-    chrome.tabs.query({ url: ['*://prompt-pro-liart.vercel.app/*', '*://localhost:3000/*'] }, (tabs) => {
+    chrome.tabs.query({ url: ['*://prompt-pro-liart.vercel.app/*', '*://localhost/*'] }, (tabs) => {
+      let foundTab = false;
       if (tabs && tabs.length > 0) {
         tabs.forEach(tab => {
-          const origin = new URL(tab.url).origin;
-          chrome.tabs.update(tab.id, { url: `${origin}/signout` });
+          try {
+            const origin = new URL(tab.url).origin;
+            // Only update if it's our production app or localhost on port 3000
+            if (origin === 'https://prompt-pro-liart.vercel.app' || origin.includes('localhost:3000')) {
+              chrome.tabs.update(tab.id, { url: `${origin}/signout` });
+              foundTab = true;
+            }
+          } catch (e) {}
         });
-      } else {
+      }
+      
+      if (!foundTab) {
         chrome.tabs.create({ url: `${API_BASE}/signout`, active: false }, (tab) => {
-          setTimeout(() => chrome.tabs.remove(tab.id), 3000);
+          setTimeout(() => { if (tab && tab.id) chrome.tabs.remove(tab.id).catch(()=>{}); }, 3000);
         });
       }
     });

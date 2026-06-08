@@ -8,6 +8,11 @@ export function createClerkSupabaseClient(clerkToken: string | null) {
       global: {
         headers: clerkToken ? { Authorization: `Bearer ${clerkToken}` } : undefined,
       },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      }
     }
   )
 }

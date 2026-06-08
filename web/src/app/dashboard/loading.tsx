@@ -1,48 +1,37 @@
-import { Card, CardContent } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Sparkle } from "lucide-react"
 
 export default function DashboardLoading() {
   return (
-    <div className="flex-1 p-6 md:p-10 space-y-10">
-      {/* Greeting Block Skeleton */}
-      <div className="space-y-2">
-        <Skeleton className="h-3 w-32 bg-[--border-mid]" />
-        <Skeleton className="h-[48px] md:h-[64px] w-64 md:w-96 bg-[--border-mid]" />
-      </div>
-
-      {/* Stats Row Skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map((i) => (
-          <Card key={i} className="glass border-[--border-subtle] bg-transparent rounded-xl overflow-hidden">
-            <CardContent className="p-5 flex flex-col gap-4">
-              <Skeleton className="h-4 w-32 bg-[--border-mid]" />
-              <div>
-                <Skeleton className="h-8 w-16 mb-2 bg-[--border-mid]" />
-                <Skeleton className="h-3 w-24 bg-[--border-mid]" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Recent Activity Skeleton */}
-      <div className="space-y-4 mt-6">
-        <Skeleton className="h-4 w-32 bg-[--border-mid]" />
-        <div className="flex flex-col gap-2">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="flex items-center gap-4 py-3 px-4 glass rounded-lg border border-[--border-subtle]">
-              <div className="flex items-center gap-3 w-[200px] shrink-0">
-                <Skeleton className="h-5 w-20 rounded-full bg-[--border-mid]" />
-                <Skeleton className="h-4 w-16 bg-[--border-mid]" />
-              </div>
-              <Skeleton className="flex-1 h-4 bg-[--border-mid]" />
-              <div className="flex items-center gap-3 shrink-0">
-                <Skeleton className="h-4 w-16 bg-[--border-mid]" />
-                <Skeleton className="h-3 w-10 bg-[--border-mid]" />
-              </div>
-            </div>
-          ))}
+    <div className="flex-1 flex items-center justify-center min-h-screen">
+      <div className="flex flex-col items-center gap-8">
+        
+        {/* Logo / Brand */}
+        <div className="flex flex-col items-center gap-3">
+          <Sparkle className="w-8 h-8 text-[--text-primary] opacity-80 animate-pulse" />
+          <span className="text-[12px] font-medium text-[--text-primary] tracking-[0.3em] uppercase opacity-80">
+            PromptPro
+          </span>
         </div>
+
+        {/* Apple-style sleek progress bar */}
+        <div className="w-[180px] h-[3px] bg-white/[0.05] rounded-full overflow-hidden backdrop-blur-sm border border-white/[0.02]">
+          <div className="h-full w-full bg-gradient-to-r from-[--text-secondary] via-[--text-primary] to-[--text-secondary] opacity-80"
+               style={{
+                 animation: "loadingBar 2s ease-in-out infinite",
+                 backgroundSize: "200% 100%"
+               }}
+          />
+        </div>
+        
+        <style dangerouslySetInnerHTML={{
+          __html: `
+            @keyframes loadingBar {
+              0% { background-position: 200% 0; transform: translateX(-100%); }
+              50% { transform: translateX(0); }
+              100% { background-position: -200% 0; transform: translateX(100%); }
+            }
+          `
+        }} />
       </div>
     </div>
   )

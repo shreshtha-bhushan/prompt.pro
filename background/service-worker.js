@@ -565,9 +565,9 @@ const PromptDatabase = {
         id: `h_${Date.now()}`, 
         text, 
         score, 
-        originalText: originalText || 'Synced from Extension',
+        originalText: originalText || text,
         scoreBefore: scoreBefore || 0,
-        site: site || 'extension',
+        site: site || 'unknown',
         strategy: strategy || 'enhance',
         timestamp: Date.now() 
       });

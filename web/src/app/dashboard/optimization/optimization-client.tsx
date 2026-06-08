@@ -61,7 +61,9 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
         user_id: uuid,
         site: "Dashboard (Manual)",
         strategy: strategy,
+        tone: tone === "none" ? null : tone,
         original_prompt: inputPrompt,
+        upgraded_prompt: data.rewritten,
         score_before: 50, // Mock baseline for manual entries
         score_after: 95,
       }).then(({ error }) => {
@@ -115,19 +117,19 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
         
         {/* Left Column: Configuration */}
         <div className="col-span-1 space-y-6 overflow-y-auto pr-2 pb-6">
-          <div className="glass p-5 rounded-xl border border-[--border-subtle] space-y-5">
-            <h3 className="text-sm font-medium text-[--text-primary] border-b border-[--border-subtle] pb-2">Configuration</h3>
+          <div className="bg-[--layer-2] border border-[--border-side] rounded-xl p-5 space-y-5">
+            <h3 className="text-sm font-medium text-[--text-primary] border-b border-[--border-side] pb-2">Configuration</h3>
             
             <div className="space-y-3">
               <Label className="text-xs text-[--text-secondary] uppercase tracking-wider font-semibold">Strategy</Label>
               <Select value={strategy} onValueChange={setStrategy}>
-                <SelectTrigger className="bg-[#111113] border-[--border-subtle] text-[--text-primary]">
+                <SelectTrigger className="bg-[--layer-3] border-[--border-side] text-[--text-primary]">
                   <SelectValue placeholder="Select strategy" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#111113] border-[--border-subtle] text-[--text-primary]">
-                  <SelectItem value="enhance" className="focus:bg-[--bg-elevated] focus:text-[--text-primary]">Enhance (Default)</SelectItem>
-                  <SelectItem value="elaborate" className="focus:bg-[--bg-elevated] focus:text-[--text-primary]">Elaborate</SelectItem>
-                  <SelectItem value="concise" className="focus:bg-[--bg-elevated] focus:text-[--text-primary]">Concise</SelectItem>
+                <SelectContent className="bg-[--layer-3] border-[--border-side] text-[--text-primary]">
+                  <SelectItem value="enhance" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Enhance (Default)</SelectItem>
+                  <SelectItem value="elaborate" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Elaborate</SelectItem>
+                  <SelectItem value="concise" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Concise</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -135,15 +137,15 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
             <div className="space-y-3">
               <Label className="text-xs text-[--text-secondary] uppercase tracking-wider font-semibold">Tone</Label>
               <Select value={tone} onValueChange={setTone}>
-                <SelectTrigger className="bg-[#111113] border-[--border-subtle] text-[--text-primary]">
+                <SelectTrigger className="bg-[--layer-3] border-[--border-side] text-[--text-primary]">
                   <SelectValue placeholder="Select tone" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#111113] border-[--border-subtle] text-[--text-primary]">
-                  <SelectItem value="none" className="focus:bg-[--bg-elevated] focus:text-[--text-primary]">No specific tone</SelectItem>
-                  <SelectItem value="professional" className="focus:bg-[--bg-elevated] focus:text-[--text-primary]">Professional</SelectItem>
-                  <SelectItem value="casual" className="focus:bg-[--bg-elevated] focus:text-[--text-primary]">Casual</SelectItem>
-                  <SelectItem value="direct" className="focus:bg-[--bg-elevated] focus:text-[--text-primary]">Direct / Assertive</SelectItem>
-                  <SelectItem value="creative" className="focus:bg-[--bg-elevated] focus:text-[--text-primary]">Creative / Imaginative</SelectItem>
+                <SelectContent className="bg-[--layer-3] border-[--border-side] text-[--text-primary]">
+                  <SelectItem value="none" className="focus:bg-[--layer-3] focus:text-[--text-primary]">No specific tone</SelectItem>
+                  <SelectItem value="professional" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Professional</SelectItem>
+                  <SelectItem value="casual" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Casual</SelectItem>
+                  <SelectItem value="direct" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Direct / Assertive</SelectItem>
+                  <SelectItem value="creative" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Creative / Imaginative</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -151,7 +153,7 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
             <div className="flex items-center justify-between pt-2">
               <div className="space-y-0.5">
                 <Label className="text-sm text-[--text-primary]">Low Token Mode</Label>
-                <p className="text-xs text-[--text-muted]">Optimize for minimal LLM cost</p>
+                <p className="text-xs text-[--text-secondary]">Optimize for minimal LLM cost</p>
               </div>
               <Switch 
                 checked={lowToken} 
@@ -164,7 +166,7 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
           <Button 
             onClick={handleOptimize} 
             disabled={isOptimizing || !inputPrompt.trim()}
-            className="w-full bg-[--text-primary] text-[--bg-base] hover:bg-[--text-secondary] py-6 rounded-xl shadow-lg transition-all"
+            className="w-full bg-[--text-primary] text-black hover:bg-[--text-secondary] py-6 rounded-xl shadow-lg transition-all"
           >
             {isOptimizing ? (
               <span className="flex items-center gap-2">
@@ -184,23 +186,23 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
         <div className="col-span-1 lg:col-span-2 flex flex-col gap-4 min-h-0">
           
           {/* Input Area */}
-          <div className="flex-1 min-h-[200px] flex flex-col glass rounded-xl border border-[--border-subtle] overflow-hidden relative group transition-colors focus-within:border-[--border-mid]">
-            <div className="bg-[--bg-elevated] border-b border-[--border-subtle] px-4 py-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-[--text-muted] uppercase tracking-widest">Original Prompt</span>
-              <span className="text-[10px] text-[--text-muted]">{inputPrompt.length} chars</span>
+          <div className="flex-1 min-h-[200px] flex flex-col card overflow-hidden relative group transition-colors focus-within:border-[--border-mid]">
+            <div className="bg-[--layer-3] border-b border-[--border-subtle] px-4 py-2 flex items-center justify-between">
+              <span className="text-xs font-medium text-[--text-secondary] uppercase tracking-widest">Original Prompt</span>
+              <span className="text-[10px] text-[--text-secondary]">{inputPrompt.length} chars</span>
             </div>
             <Textarea
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
               placeholder="Paste the prompt you want to optimize here..."
-              className="flex-1 bg-transparent border-0 resize-none text-[--text-primary] p-4 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-[--text-muted]"
+              className="flex-1 bg-transparent border-0 resize-none text-[--text-primary] p-4 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-[--text-secondary]"
             />
           </div>
 
           {/* Output Area */}
-          <div className="flex-1 min-h-[250px] flex flex-col glass rounded-xl border border-[--border-subtle] overflow-hidden relative">
-            <div className="bg-[--bg-elevated] border-b border-[--border-subtle] px-4 py-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-[--text-muted] uppercase tracking-widest">Optimized Output</span>
+          <div className="flex-1 min-h-[250px] flex flex-col card overflow-hidden relative">
+            <div className="bg-[--layer-3] border-b border-[--border-subtle] px-4 py-2 flex items-center justify-between">
+              <span className="text-xs font-medium text-[--text-secondary] uppercase tracking-widest">Optimized Output</span>
               
               <AnimatePresence>
                 {outputPrompt && (
@@ -213,17 +215,17 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
                       variant="ghost"
                       size="sm"
                       onClick={handleSaveToLibrary}
-                      className="h-6 px-2 text-xs text-[--text-muted] hover:text-[--text-primary] hover:bg-[--bg-elevated]"
+                      className="h-6 px-2 text-xs text-[--text-secondary] hover:text-[--text-primary] hover:bg-[--layer-3]"
                     >
                       <SaveIcon className="w-3 h-3 mr-1.5" />
                       Save
                     </Button>
-                    <div className="w-px h-3 bg-[--border-subtle]" />
+                    <div className="w-px h-3 bg-[--border-side]" />
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={handleCopy}
-                      className="h-6 px-2 text-xs text-[--text-muted] hover:text-[--text-primary] hover:bg-[--bg-elevated]"
+                      className="h-6 px-2 text-xs text-[--text-secondary] hover:text-[--text-primary] hover:bg-[--layer-3]"
                     >
                       {copied ? <CheckIcon className="w-3 h-3 mr-1.5 text-green-500" /> : <CopyIcon className="w-3 h-3 mr-1.5" />}
                       {copied ? "Copied" : "Copy"}
@@ -238,13 +240,13 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
                 <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0a]/50 backdrop-blur-sm z-10">
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-6 h-6 rounded-full border-2 border-[--text-muted] border-t-[--text-primary] animate-spin" />
-                    <span className="text-xs text-[--text-muted] animate-pulse">Applying 5-component framework...</span>
+                    <span className="text-xs text-[--text-secondary] animate-pulse">Applying 5-component framework...</span>
                   </div>
                 </div>
               ) : null}
               
               {!outputPrompt && !isOptimizing ? (
-                <div className="h-full flex flex-col items-center justify-center text-[--text-muted] opacity-50 select-none">
+                <div className="h-full flex flex-col items-center justify-center text-[--text-secondary] opacity-50 select-none">
                   <Wand2Icon className="w-8 h-8 mb-3 opacity-20" />
                   <p className="text-sm">Your optimized prompt will appear here</p>
                 </div>

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createClient } from '@supabase/supabase-js';
 import { clerkToUuid } from '@/lib/utils'; // Keeping import just in case, but unused here
@@ -67,6 +67,10 @@ export async function GET() {
       id: log.id,
       text: log.upgraded_prompt,
       score: log.score_after,
+      originalText: log.original_prompt,
+      scoreBefore: log.score_before,
+      site: log.site,
+      strategy: log.strategy,
       createdAt: log.created_at
     }));
 
@@ -117,25 +121,59 @@ export async function POST(request: Request) {
 
       // 1. Merge History
       if (history.length > 0) {
-        // Fetch existing texts to prevent duplicates
+        // Fetch existing records to prevent duplicates AND to update stale ones
         const { data: existingLogs } = await supabase
           .from('optimization_logs')
-          .select('upgraded_prompt')
+          .select('id, upgraded_prompt, site, original_prompt')
           .eq('user_id', uuid);
         
-        const existingTexts = new Set((existingLogs || []).map(l => l.upgraded_prompt));
-        const newLogs = history.filter((h: any) => !existingTexts.has(h.text)).map((h: any) => ({
-          user_id: uuid,
-          original_prompt: h.originalText || "Synced from Extension",
-          upgraded_prompt: h.text,
-          score_before: h.scoreBefore || 0,
-          score_after: h.score || 0,
-          site: h.site || "extension",
-          strategy: h.strategy || "enhance"
-        }));
+        const existingMap = new Map((existingLogs || []).map(l => [l.upgraded_prompt, l]));
+        
+        const newLogs: any[] = [];
+        const updatePromises: Promise<any>[] = [];
+
+        for (const h of history) {
+          const existing = existingMap.get(h.text);
+          if (!existing) {
+            // New item — insert it
+            newLogs.push({
+              user_id: uuid,
+              original_prompt: h.originalText || h.text,
+              upgraded_prompt: h.text,
+              score_before: h.scoreBefore || 0,
+              score_after: h.score || 0,
+              site: h.site || "unknown",
+              strategy: h.strategy || "enhance"
+            });
+          } else {
+            // Existing item — update if it has stale/generic values
+            const updates: Record<string, any> = {};
+            
+            if (h.site && h.site !== 'extension' && (existing.site === 'extension' || !existing.site)) {
+              updates.site = h.site;
+            }
+            if (h.originalText && h.originalText !== 'Synced from Extension' && 
+                (existing.original_prompt === 'Synced from Extension' || !existing.original_prompt)) {
+              updates.original_prompt = h.originalText;
+            }
+            
+            if (Object.keys(updates).length > 0) {
+              updatePromises.push(
+                supabase.from('optimization_logs')
+                  .update(updates)
+                  .eq('id', existing.id)
+              );
+            }
+          }
+        }
 
         if (newLogs.length > 0) {
           await supabase.from('optimization_logs').insert(newLogs);
+        }
+        
+        // Run updates for stale records in parallel
+        if (updatePromises.length > 0) {
+          await Promise.all(updatePromises);
         }
       }
 

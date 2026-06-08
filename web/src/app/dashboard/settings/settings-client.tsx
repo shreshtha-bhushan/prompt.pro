@@ -1,97 +1,201 @@
 "use client"
 
-import { UserProfile } from "@clerk/nextjs"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { useState } from "react"
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
+import { SaveIcon } from "lucide-react"
+
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  defaultStrategy: "enhance",
+  defaultTone: "professional",
+  lowTokenEnabled: false,
+  noFluff: false,
+  siteMemory: true,
+  autocompleteEnabled: true,
+  openrouterApiKey: "",
+}
 
 export function SettingsClient({ userId, clerkToken }: { userId: string, clerkToken: string | null }) {
-  const [apiKey, setApiKey] = useState("")
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [isSaving, setIsSaving] = useState(false)
+
+  // Load settings from localStorage on mount (fallback if extension not connected)
+  useEffect(() => {
+    const saved = localStorage.getItem("promptpro_dashboard_settings")
+    if (saved) {
+      try {
+        setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(saved) })
+      } catch (e) {}
+    }
+  }, [])
+
+  const handleToggle = (key: keyof typeof settings) => (checked: boolean) => {
+    setSettings(prev => ({ ...prev, [key]: checked }))
+  }
+
+  const handleChange = (key: keyof typeof settings) => (val: string) => {
+    setSettings(prev => ({ ...prev, [key]: val }))
+  }
 
   const handleSavePreferences = async () => {
     setIsSaving(true)
-    // Simulate an API call to save preferences
-    await new Promise((resolve) => setTimeout(resolve, 800))
+    
+    // 1. Save locally for dashboard fallback
+    localStorage.setItem("promptpro_dashboard_settings", JSON.stringify(settings))
+    
+    // 2. Broadcast to extension via content script
+    window.postMessage({ 
+      type: "PROMPTPRO_UPDATE_SETTINGS", 
+      payload: settings 
+    }, "*")
+
+    await new Promise((resolve) => setTimeout(resolve, 600))
     toast.success("Preferences saved successfully!")
     setIsSaving(false)
   }
 
   return (
-    <Tabs defaultValue="account" className="w-full max-w-4xl">
-      <TabsList className="mb-6 bg-transparent border-b border-[--border-subtle] rounded-none w-full justify-start h-auto p-0 gap-6">
-        <TabsTrigger 
-          value="account"
-          className="rounded-none border-b-2 border-transparent data-[state=active]:border-[--text-primary] data-[state=active]:bg-transparent data-[state=active]:text-[--text-primary] text-[--text-muted] pb-3 px-1"
-        >
-          Account
-        </TabsTrigger>
-        <TabsTrigger 
-          value="extension"
-          className="rounded-none border-b-2 border-transparent data-[state=active]:border-[--text-primary] data-[state=active]:bg-transparent data-[state=active]:text-[--text-primary] text-[--text-muted] pb-3 px-1"
-        >
-          Extension Preferences
-        </TabsTrigger>
-      </TabsList>
+    <div className="w-full max-w-4xl space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-[--text-primary]">Preferences</h1>
+        <p className="text-sm text-[--text-secondary]">Configure how PromptPro behaves across the web.</p>
+      </div>
 
-      <TabsContent value="account" className="mt-0">
-        <div className="glass p-1 rounded-xl border border-[--border-subtle] overflow-hidden">
-          <UserProfile 
-            appearance={{
-              elements: {
-                rootBox: "w-full",
-                cardBox: "w-full shadow-none border-none bg-transparent rounded-none",
-                navbar: "hidden", // Hide clerk's internal navbar to keep it clean
-                pageScrollBox: "bg-transparent",
-                profileSectionTitleText: "text-[--text-primary]",
-                profileSectionPrimaryButton: "text-[--text-secondary] hover:bg-[--bg-elevated]",
-                badge: "bg-[--bg-elevated] text-[--text-primary] border-[--border-subtle]",
-                formButtonPrimary: "bg-[--text-primary] text-[--bg-base] hover:bg-[--text-secondary]",
-              }
-            }}
-            routing="hash"
-          />
-        </div>
-      </TabsContent>
-
-      <TabsContent value="extension" className="mt-0">
-        <Card className="glass border-[--border-subtle] bg-transparent text-[--text-primary]">
-          <CardHeader>
-            <CardTitle>API Configuration</CardTitle>
-            <CardDescription className="text-[--text-muted]">
-              Configure your default API keys for the PromptPro extension.
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Core Behavior */}
+        <Card className="card bg-transparent text-[--text-primary] border-[--border-side]">
+          <CardHeader className="border-b border-[--border-side] pb-4">
+            <CardTitle className="text-lg">Core Behavior</CardTitle>
+            <CardDescription className="text-[--text-secondary]">
+              Manage the default optimization logic.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="api-key" className="text-[--text-secondary]">OpenAI API Key (Optional)</Label>
+          <CardContent className="space-y-6 pt-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-base">Enable Extension</Label>
+                <p className="text-xs text-[--text-secondary]">Toggle PromptPro across all sites</p>
+              </div>
+              <Switch checked={settings.enabled} onCheckedChange={handleToggle("enabled")} />
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm text-[--text-secondary] uppercase tracking-wider font-semibold">Default Strategy</Label>
+              <Select value={settings.defaultStrategy} onValueChange={handleChange("defaultStrategy")}>
+                <SelectTrigger className="bg-[--layer-3] border-[--border-side] text-[--text-primary]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[--layer-3] border-[--border-side] text-[--text-primary]">
+                  <SelectItem value="enhance" className="focus:bg-[--layer-4] focus:text-[--text-primary]">Enhance</SelectItem>
+                  <SelectItem value="elaborate" className="focus:bg-[--layer-4] focus:text-[--text-primary]">Elaborate</SelectItem>
+                  <SelectItem value="concise" className="focus:bg-[--layer-4] focus:text-[--text-primary]">Concise</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm text-[--text-secondary] uppercase tracking-wider font-semibold">Default Tone</Label>
+              <Select value={settings.defaultTone} onValueChange={handleChange("defaultTone")}>
+                <SelectTrigger className="bg-[--layer-3] border-[--border-side] text-[--text-primary]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[--layer-3] border-[--border-side] text-[--text-primary]">
+                  <SelectItem value="none" className="focus:bg-[--layer-4] focus:text-[--text-primary]">None</SelectItem>
+                  <SelectItem value="professional" className="focus:bg-[--layer-4] focus:text-[--text-primary]">Professional</SelectItem>
+                  <SelectItem value="casual" className="focus:bg-[--layer-4] focus:text-[--text-primary]">Casual</SelectItem>
+                  <SelectItem value="direct" className="focus:bg-[--layer-4] focus:text-[--text-primary]">Direct / Assertive</SelectItem>
+                  <SelectItem value="creative" className="focus:bg-[--layer-4] focus:text-[--text-primary]">Creative</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Features & API */}
+        <Card className="card bg-transparent text-[--text-primary] border-[--border-side]">
+          <CardHeader className="border-b border-[--border-side] pb-4">
+            <CardTitle className="text-lg">Features & API</CardTitle>
+            <CardDescription className="text-[--text-secondary]">
+              Toggle advanced features and LLM settings.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6 pt-6">
+            
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Autocomplete Prompts</Label>
+                <p className="text-xs text-[--text-secondary]">Show AI suggestions while typing</p>
+              </div>
+              <Switch checked={settings.autocompleteEnabled} onCheckedChange={handleToggle("autocompleteEnabled")} />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Low Token Mode</Label>
+                <p className="text-xs text-[--text-secondary]">Optimize for minimal LLM cost</p>
+              </div>
+              <Switch checked={settings.lowTokenEnabled} onCheckedChange={handleToggle("lowTokenEnabled")} />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>No Fluff Mode</Label>
+                <p className="text-xs text-[--text-secondary]">Remove filler words and pleasantries</p>
+              </div>
+              <Switch checked={settings.noFluff} onCheckedChange={handleToggle("noFluff")} />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Site Memory</Label>
+                <p className="text-xs text-[--text-secondary]">Remember settings per website</p>
+              </div>
+              <Switch checked={settings.siteMemory} onCheckedChange={handleToggle("siteMemory")} />
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <Label className="text-sm text-[--text-secondary] uppercase tracking-wider font-semibold">OpenRouter API Key (Optional)</Label>
               <Input
-                id="api-key"
                 type="password"
-                placeholder="sk-..."
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="bg-[#111113] border-[--border-subtle] text-[--text-primary] max-w-md"
+                placeholder="sk-or-v1-..."
+                value={settings.openrouterApiKey}
+                onChange={(e) => handleChange("openrouterApiKey")(e.target.value)}
+                className="bg-[--layer-3] border-[--border-side] text-[--text-primary]"
               />
-              <p className="text-xs text-[--text-muted]">
-                If provided, the extension will use your own key instead of the shared pool.
+              <p className="text-[10px] text-[--text-secondary]">
+                Overrides the shared API pool and uses your own billing for OpenRouter models.
               </p>
             </div>
 
-            <Button 
-              onClick={handleSavePreferences}
-              disabled={isSaving}
-              className="bg-[--bg-elevated] text-[--text-primary] border border-[--border-mid] hover:bg-[#222222]"
-            >
-              {isSaving ? "Saving..." : "Save Preferences"}
-            </Button>
           </CardContent>
         </Card>
-      </TabsContent>
-    </Tabs>
+      </div>
+
+      <div className="flex justify-end pt-4">
+        <Button 
+          onClick={handleSavePreferences}
+          disabled={isSaving}
+          className="bg-[--text-primary] text-[--bg-base] hover:bg-[--text-secondary] px-8 py-6 rounded-xl transition-all shadow-lg"
+        >
+          {isSaving ? (
+            <span className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full border-2 border-[--bg-base] border-t-transparent animate-spin" />
+              Saving...
+            </span>
+          ) : (
+            <span className="flex items-center gap-2 font-medium">
+              <SaveIcon className="w-4 h-4" />
+              Save Preferences
+            </span>
+          )}
+        </Button>
+      </div>
+    </div>
   )
 }

@@ -11,6 +11,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -27,8 +38,7 @@ export function LibraryClient({ userId, clerkToken }: { userId: string, clerkTok
   const [newContent, setNewContent] = useState("")
   const [newType, setNewType] = useState<"snippet" | "context">("snippet")
   
-  // Delete Confirmation State
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
 
   const fetchSnippets = useCallback(async () => {
     const uuid = userId
@@ -73,19 +83,11 @@ export function LibraryClient({ userId, clerkToken }: { userId: string, clerkTok
   }
 
   const handleDelete = async (id: string) => {
-    if (confirmDeleteId === id) {
-      // Confirmed, delete
-      const { error } = await supabase.from("snippets").delete().eq("id", id)
-      if (!error) {
-        const updatedSnippets = snippets.filter(s => s.id !== id)
-        setSnippets(updatedSnippets)
-        window.postMessage({ type: "PROMPTPRO_SYNC", payload: updatedSnippets }, "*")
-      }
-      setConfirmDeleteId(null)
-    } else {
-      // First click, set confirmation
-      setConfirmDeleteId(id)
-      setTimeout(() => setConfirmDeleteId(null), 2000)
+    const { error } = await supabase.from("snippets").delete().eq("id", id)
+    if (!error) {
+      const updatedSnippets = snippets.filter(s => s.id !== id)
+      setSnippets(updatedSnippets)
+      window.postMessage({ type: "PROMPTPRO_SYNC", payload: updatedSnippets }, "*")
     }
   }
 
@@ -98,7 +100,7 @@ export function LibraryClient({ userId, clerkToken }: { userId: string, clerkTok
   return (
     <div className="flex h-full min-h-0">
       {/* Left Sidebar */}
-      <div className="w-[280px] shrink-0 border-r border-[--border-subtle] bg-[#111113] flex flex-col p-6">
+      <div className="w-[280px] shrink-0 border-r border-[--border-side] bg-[#111113] flex flex-col p-6">
         <h2 className="text-sm font-medium text-[--text-primary] mb-6 tracking-wide">LIBRARY</h2>
         
         <div className="flex flex-col gap-2 flex-1">
@@ -107,7 +109,7 @@ export function LibraryClient({ userId, clerkToken }: { userId: string, clerkTok
             className={`flex items-center justify-between text-sm py-1.5 px-3 -ml-3 rounded transition-colors ${activeCategory === "all" ? 'text-[--text-primary] border-l-2 border-[--text-primary] bg-[rgba(255,255,255,0.04)]' : 'text-[--text-secondary] hover:text-[--text-primary] hover:bg-[rgba(255,255,255,0.02)] border-l-2 border-transparent'}`}
           >
             <span>All Items</span>
-            <span className="text-[11px] bg-[--bg-elevated] px-1.5 py-0.5 rounded-full text-[--text-muted]">{allCount}</span>
+            <span className="text-[11px] bg-[--layer-3] px-1.5 py-0.5 rounded-full text-[--text-secondary]">{allCount}</span>
           </button>
 
           <button 
@@ -115,7 +117,7 @@ export function LibraryClient({ userId, clerkToken }: { userId: string, clerkTok
             className={`flex items-center justify-between text-sm py-1.5 px-3 -ml-3 rounded transition-colors ${activeCategory === "snippet" ? 'text-[--text-primary] border-l-2 border-[--text-primary] bg-[rgba(255,255,255,0.04)]' : 'text-[--text-secondary] hover:text-[--text-primary] hover:bg-[rgba(255,255,255,0.02)] border-l-2 border-transparent'}`}
           >
             <span>Prompt Snippets</span>
-            <span className="text-[11px] bg-[--bg-elevated] px-1.5 py-0.5 rounded-full text-[--text-muted]">{snippetCount}</span>
+            <span className="text-[11px] bg-[--layer-3] px-1.5 py-0.5 rounded-full text-[--text-secondary]">{snippetCount}</span>
           </button>
 
           <button 
@@ -123,7 +125,7 @@ export function LibraryClient({ userId, clerkToken }: { userId: string, clerkTok
             className={`flex items-center justify-between text-sm py-1.5 px-3 -ml-3 rounded transition-colors ${activeCategory === "context" ? 'text-[--text-primary] border-l-2 border-[--text-primary] bg-[rgba(255,255,255,0.04)]' : 'text-[--text-secondary] hover:text-[--text-primary] hover:bg-[rgba(255,255,255,0.02)] border-l-2 border-transparent'}`}
           >
             <span>Context Blocks</span>
-            <span className="text-[11px] bg-[--bg-elevated] px-1.5 py-0.5 rounded-full text-[--text-muted]">{contextCount}</span>
+            <span className="text-[11px] bg-[--layer-3] px-1.5 py-0.5 rounded-full text-[--text-secondary]">{contextCount}</span>
           </button>
         </div>
 
@@ -134,33 +136,33 @@ export function LibraryClient({ userId, clerkToken }: { userId: string, clerkTok
               New Snippet
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-[#111113] border border-[--border-subtle] text-[--text-primary] sm:max-w-[500px]">
+          <DialogContent className="bg-[#111113] border border-[--border-side] text-[--text-primary] sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>Add to Library</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-5 py-4">
               <div className="space-y-2">
-                <label className="text-xs uppercase tracking-wide text-[--text-muted]">Title</label>
+                <label className="text-xs uppercase tracking-wide text-[--text-secondary]">Title</label>
                 <Input 
                   value={newTitle}
                   onChange={e => setNewTitle(e.target.value)}
                   placeholder="e.g. SEO Persona Context"
-                  className="bg-[--bg-elevated] border-[--border-subtle] text-sm"
+                  className="bg-[--layer-3] border-[--border-side] text-sm"
                 />
               </div>
               
               <div className="space-y-2">
-                <label className="text-xs uppercase tracking-wide text-[--text-muted]">Type</label>
-                <div className="flex bg-[--bg-elevated] p-1 rounded-lg w-fit border border-[--border-subtle]">
+                <label className="text-xs uppercase tracking-wide text-[--text-secondary]">Type</label>
+                <div className="flex bg-[--layer-3] p-1 rounded-lg w-fit border border-[--border-side]">
                   <button 
                     onClick={() => setNewType("snippet")}
-                    className={`text-xs px-3 py-1.5 rounded-md transition-colors ${newType === "snippet" ? 'bg-[rgba(255,255,255,0.1)] text-[--text-primary]' : 'text-[--text-muted] hover:text-[--text-secondary]'}`}
+                    className={`text-xs px-3 py-1.5 rounded-md transition-colors ${newType === "snippet" ? 'bg-[rgba(255,255,255,0.1)] text-[--text-primary]' : 'text-[--text-secondary] hover:text-[--text-secondary]'}`}
                   >
                     Prompt Snippet
                   </button>
                   <button 
                     onClick={() => setNewType("context")}
-                    className={`text-xs px-3 py-1.5 rounded-md transition-colors ${newType === "context" ? 'bg-[rgba(255,255,255,0.1)] text-[--text-primary]' : 'text-[--text-muted] hover:text-[--text-secondary]'}`}
+                    className={`text-xs px-3 py-1.5 rounded-md transition-colors ${newType === "context" ? 'bg-[rgba(255,255,255,0.1)] text-[--text-primary]' : 'text-[--text-secondary] hover:text-[--text-secondary]'}`}
                   >
                     Context Block
                   </button>
@@ -168,18 +170,18 @@ export function LibraryClient({ userId, clerkToken }: { userId: string, clerkTok
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs uppercase tracking-wide text-[--text-muted]">Content</label>
+                <label className="text-xs uppercase tracking-wide text-[--text-secondary]">Content</label>
                 <Textarea 
                   value={newContent}
                   onChange={e => setNewContent(e.target.value)}
                   rows={6}
                   placeholder="Paste the prompt or context content here..."
-                  className="bg-[--bg-elevated] border-[--border-subtle] text-sm font-mono resize-none"
+                  className="bg-[--layer-3] border-[--border-side] text-sm font-mono resize-none"
                 />
               </div>
             </div>
             <div className="flex justify-end">
-              <Button onClick={handleSave} className="bg-[--bg-elevated] border border-[--border-mid] text-[--text-primary] hover:bg-[rgba(255,255,255,0.1)]">
+              <Button onClick={handleSave} className="bg-[--layer-3] border border-[--border-mid] text-[--text-primary] hover:bg-[rgba(255,255,255,0.1)]">
                 Save
               </Button>
             </div>
@@ -191,33 +193,51 @@ export function LibraryClient({ userId, clerkToken }: { userId: string, clerkTok
       <div className="flex-1 p-6 md:p-10 overflow-y-auto">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {filteredSnippets.length === 0 ? (
-            <div className="col-span-full text-center text-[--text-muted] py-20 text-sm">
+            <div className="col-span-full text-center text-[--text-secondary] py-20 text-sm">
               No items in this category.
             </div>
           ) : (
             filteredSnippets.map(snippet => (
-              <div key={snippet.id} className="glass rounded-xl p-5 border border-[--border-subtle] flex flex-col gap-4">
+              <div key={snippet.id} className="card p-5 flex flex-col gap-4">
                 <div className="text-base font-medium text-[--text-primary]">
                   {snippet.title}
                 </div>
-                <div className="text-sm text-[--text-secondary] line-clamp-3 font-mono leading-relaxed bg-[rgba(255,255,255,0.02)] p-3 rounded-lg border border-[--border-subtle]">
+                <div className="text-sm text-[--text-secondary] line-clamp-3 font-mono leading-relaxed bg-[rgba(255,255,255,0.02)] p-3 rounded-lg border border-[--border-side]">
                   {snippet.content}
                 </div>
                 <div className="mt-auto flex items-center justify-between pt-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-[10px] border border-[--border-subtle] rounded-full px-2 py-0.5 text-[--text-secondary] uppercase tracking-wider">
+                    <span className="text-[10px] border border-[--border-side] rounded-full px-2 py-0.5 text-[--text-secondary] uppercase tracking-wider">
                       {snippet.type === "snippet" ? "Snippet" : "Context"}
                     </span>
-                    <span className="text-xs text-[--text-muted]">
+                    <span className="text-xs text-[--text-secondary]">
                       {new Date(snippet.created_at).toLocaleDateString()}
                     </span>
                   </div>
-                  <button 
-                    onClick={() => handleDelete(snippet.id)}
-                    className={`p-1.5 rounded-md transition-colors ${confirmDeleteId === snippet.id ? 'bg-red-500/10 text-red-500' : 'text-[--text-muted] hover:bg-[--bg-elevated] hover:text-[--text-primary]'}`}
-                  >
-                    {confirmDeleteId === snippet.id ? <CheckIcon className="w-4 h-4" /> : <Trash2Icon className="w-4 h-4" />}
-                  </button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <button className="p-1.5 rounded-md transition-colors text-[--text-secondary] hover:bg-[--layer-3] hover:text-[--text-primary]">
+                        <Trash2Icon className="w-4 h-4" />
+                      </button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="bg-[#111113] border-[--border-side] text-[--text-primary]">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this {snippet.type}?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-[--text-secondary]">
+                          This action cannot be undone. This will permanently delete "{snippet.title}" from your library.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="bg-[--layer-3] border-[--border-side] text-[--text-primary] hover:bg-[rgba(255,255,255,0.1)]">Cancel</AlertDialogCancel>
+                        <AlertDialogAction 
+                          className="bg-red-500 text-white hover:bg-red-600"
+                          onClick={() => handleDelete(snippet.id)}
+                        >
+                          Yes, delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
             ))
