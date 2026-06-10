@@ -6,15 +6,17 @@ export function EmptyState() {
     <div className="w-full flex flex-col items-center">
       <div className="card p-16 px-12 text-center max-w-[520px] mx-auto w-full mb-12">
         <Sparkles className="w-8 h-8 text-[--text-tertiary] mx-auto mb-6" />
-        <h2 className="text-[22px] font-light text-[--text-primary] tracking-[-0.02em] mb-4">
+        <h2 className="text-[22px] font-semibold text-[--text-primary] tracking-[-0.02em] mb-4">
           Your first upgrade is one click away
         </h2>
         <p className="text-[14px] text-[--text-secondary] leading-[1.7] mb-8 max-w-[320px] mx-auto">
-          Install the PromptPro extension, open ChatGPT or Claude, type any prompt, and click ✦ Upgrade.
+          Install the PromptPro extension, open ChatGPT, Claude or Gemini, type any prompt, and click ✦ Upgrade.
         </p>
         <div className="flex items-center justify-center">
           <a 
-            href="#" 
+            href="https://promptpro-beta.vercel.app" 
+            target="_blank"
+            rel="noopener noreferrer"
             className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-white px-8 py-3.5 text-sm font-semibold text-black transition-all hover:scale-105 active:scale-95 shadow-[0_0_40px_-10px_rgba(255,255,255,0.4)] hover:shadow-[0_0_60px_-10px_rgba(255,255,255,0.6)]"
           >
             <span className="relative z-10 flex items-center gap-2">
