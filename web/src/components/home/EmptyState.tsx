@@ -10,7 +10,7 @@ export function EmptyState() {
           Your first upgrade is one click away
         </h2>
         <p className="text-[14px] text-[--text-secondary] leading-[1.7] mb-8 max-w-[320px] mx-auto">
-          Install the PromptPro extension, open ChatGPT, Claude or Gemini, type any prompt, and click ✦ Upgrade.
+          Install the PromptPro extension, open ChatGPT, Claude or Gemini, type any prompt, and click ✦Upgrade.
         </p>
         <div className="flex items-center justify-center">
           <a 

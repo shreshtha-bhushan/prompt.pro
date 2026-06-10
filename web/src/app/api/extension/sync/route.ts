@@ -211,6 +211,53 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true }, { headers: corsHeaders });
     }
 
+    // ── Individual item actions ───────────────────────────────────
+
+    if (action === 'saveLibrary') {
+      const { title, text } = data;
+      const { error } = await supabase.from('snippets').insert({
+        user_id: uuid,
+        title: title || 'Untitled',
+        content: text || '',
+        type: 'snippet'
+      });
+      if (error) throw error;
+      return NextResponse.json({ success: true }, { headers: corsHeaders });
+    }
+
+    if (action === 'deleteLibrary') {
+      const { id } = data;
+      if (id) {
+        await supabase.from('snippets').delete().eq('id', id).eq('user_id', uuid);
+      }
+      return NextResponse.json({ success: true }, { headers: corsHeaders });
+    }
+
+    if (action === 'addContext') {
+      const { title, content } = data;
+      const { error } = await supabase.from('snippets').insert({
+        user_id: uuid,
+        title: title || 'Context',
+        content: content || '',
+        type: 'context'
+      });
+      if (error) throw error;
+      return NextResponse.json({ success: true }, { headers: corsHeaders });
+    }
+
+    if (action === 'deleteContext') {
+      const { id } = data;
+      if (id) {
+        await supabase.from('snippets').delete().eq('id', id).eq('user_id', uuid);
+      }
+      return NextResponse.json({ success: true }, { headers: corsHeaders });
+    }
+
+    if (action === 'toggleContext') {
+      // Context active state is local-only (not persisted in DB), so just acknowledge
+      return NextResponse.json({ success: true }, { headers: corsHeaders });
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400, headers: corsHeaders });
 
   } catch (error: any) {
