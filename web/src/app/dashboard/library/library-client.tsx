@@ -101,7 +101,7 @@ export function LibraryClient({ userId, clerkToken }: { userId: string, clerkTok
     <div className="flex h-full min-h-0">
       {/* Left Sidebar */}
       <div className="w-[280px] shrink-0 border-r border-[--border-side] bg-[#111113] flex flex-col p-6">
-        <h2 className="text-sm font-medium text-[--text-primary] mb-6 tracking-wide">LIBRARY</h2>
+        <h2 className="text-2xl font-[800] tracking-tight bg-gradient-to-b from-white to-neutral-400 bg-clip-text text-transparent mb-6">Library</h2>
         
         <div className="flex flex-col gap-2 flex-1">
           <button 

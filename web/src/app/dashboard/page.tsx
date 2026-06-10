@@ -18,6 +18,8 @@ export default async function DashboardHome() {
   const user = await currentUser()
   const supabase = await createClient()
   
+  const displayName = user?.username || user?.firstName || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || "User"
+  
   // Fetch everything needed
   const { data: history } = await supabase
     .from('optimization_logs')
@@ -42,11 +44,11 @@ export default async function DashboardHome() {
       <PageTransition>
         <div className="flex-1 pt-[40px] px-[48px] pb-[40px]">
           <div className="mb-[48px]">
-            <h2 className="text-[11px] font-medium tracking-[0.12em] uppercase text-[--text-tertiary] mb-1">
+            <h2 className="text-[12px] font-semibold tracking-[0.15em] uppercase text-[--text-secondary] mb-2">
               {getGreetingWord()},
             </h2>
-            <h1 className="text-[64px] font-[200] tracking-[-0.04em] leading-[1] text-[--text-primary] mb-2">
-              {user?.firstName || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || "User"}.
+            <h1 className="text-[64px] font-[800] tracking-[-0.04em] leading-[1] bg-gradient-to-b from-white to-neutral-400 bg-clip-text text-transparent mb-2">
+              {displayName}
             </h1>
             <p className="text-[13px] text-[--text-secondary]">
               No upgrades yet today. Head to ChatGPT or Claude to get started.
@@ -152,11 +154,11 @@ export default async function DashboardHome() {
         {/* Greeting Block & Date/Weather */}
         <div className="mb-[48px] flex items-end justify-between">
           <div>
-            <h2 className="text-[16px] font-medium tracking-[0.15em] uppercase text-[--text-secondary] mb-2">
+            <h2 className="text-[16px] font-semibold tracking-[0.15em] uppercase text-[--text-secondary] mb-2">
               {getGreetingWord()},
             </h2>
-            <h1 className="text-[80px] font-bold tracking-[-0.04em] leading-[1] text-[--text-primary] mb-3">
-              {user?.firstName || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || "User"}.
+            <h1 className="text-[80px] font-[800] tracking-[-0.04em] leading-[1] bg-gradient-to-b from-white to-neutral-400 bg-clip-text text-transparent mb-3">
+              {displayName}
             </h1>
             <p className="text-[14px] text-[--text-secondary] mt-2">
               {todayItems.length === 0 

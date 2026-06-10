@@ -108,7 +108,7 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
     <div className="flex-1 flex flex-col min-h-0 h-full p-6 md:p-10 max-w-6xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8 shrink-0">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[--text-primary]">Studio</h1>
+          <h1 className="text-3xl font-[800] tracking-tight bg-gradient-to-b from-white to-neutral-400 bg-clip-text text-transparent">Studio</h1>
           <p className="text-sm text-[--text-secondary]">Manually optimize and test your prompts.</p>
         </div>
       </div>

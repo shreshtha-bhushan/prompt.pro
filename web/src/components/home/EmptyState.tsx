@@ -12,12 +12,16 @@ export function EmptyState() {
         <p className="text-[14px] text-[--text-secondary] leading-[1.7] mb-8 max-w-[320px] mx-auto">
           Install the PromptPro extension, open ChatGPT or Claude, type any prompt, and click ✦ Upgrade.
         </p>
-        <div className="flex items-center justify-center gap-4">
-          <a href="#" className="border border-white/[0.12] bg-white/[0.06] text-[--text-primary] text-[13px] px-5 py-2.5 rounded-lg hover:bg-white/[0.10] transition-colors">
-            Install Extension
-          </a>
-          <a href="#" className="text-[--text-secondary] text-[13px] px-5 py-2.5 rounded-lg hover:text-[--text-primary] transition-colors">
-            Watch Demo
+        <div className="flex items-center justify-center">
+          <a 
+            href="#" 
+            className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-white px-8 py-3.5 text-sm font-semibold text-black transition-all hover:scale-105 active:scale-95 shadow-[0_0_40px_-10px_rgba(255,255,255,0.4)] hover:shadow-[0_0_60px_-10px_rgba(255,255,255,0.6)]"
+          >
+            <span className="relative z-10 flex items-center gap-2">
+              Install Extension
+              <Sparkles className="w-4 h-4" />
+            </span>
+            <div className="absolute inset-0 z-0 bg-gradient-to-r from-transparent via-white/50 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
           </a>
         </div>
       </div>
