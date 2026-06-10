@@ -14,7 +14,7 @@ export function EmptyState() {
         </p>
         <div className="flex items-center justify-center">
           <a 
-            href="https://promptpro-beta.vercel.app" 
+            href="https://promptpro-beta.vercel.app#install" 
             target="_blank"
             rel="noopener noreferrer"
             className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-white px-8 py-3.5 text-sm font-semibold text-black transition-all hover:scale-105 active:scale-95 shadow-[0_0_40px_-10px_rgba(255,255,255,0.4)] hover:shadow-[0_0_60px_-10px_rgba(255,255,255,0.6)]"
