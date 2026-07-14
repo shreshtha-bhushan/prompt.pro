@@ -6,23 +6,13 @@ interface ContributionGridProps {
 }
 
 export function ContributionGrid({ streakCount, gridData }: ContributionGridProps) {
-  // Generate a full year of empty data if gridData is empty or short
-  // For the exact look, we need 52 cols x 7 rows = 364 cells
-  // We'll just build an array of 364 cells. Real data mapping would go here.
-  
-  // Fake the grid to match the spec:
-  // 0 upgrades:  #1a1a1a (var(--layer-3))
-  // 1 upgrade:   rgba(74, 222, 128, 0.15)
-  // 2–4:         rgba(74, 222, 128, 0.35)
-  // 5–9:         rgba(74, 222, 128, 0.60)
-  // 10+:         rgba(74, 222, 128, 0.90)
-  
+  // Generate a shorter view (20 columns x 7 rows = 140 cells) for larger blocks
   const cells = React.useMemo(() => {
-    if (gridData.length === 364) return gridData
+    if (gridData.length === 140) return gridData
 
     const newCells = []
     const today = new Date()
-    for (let i = 363; i >= 0; i--) {
+    for (let i = 139; i >= 0; i--) {
       const d = new Date()
       d.setDate(today.getDate() - i)
       const dateStr = d.toISOString().split("T")[0]
@@ -46,21 +36,21 @@ export function ContributionGrid({ streakCount, gridData }: ContributionGridProp
   const todayStr = new Date().toISOString().split("T")[0]
 
   return (
-    <div className="w-full min-w-0 overflow-x-auto no-scrollbar">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="section-head mb-0">UPGRADE ACTIVITY</span>
+    <div className="card w-full p-6 border border-white/[0.05] bg-[#1A1A1C] flex flex-col justify-between">
+      <div className="flex items-center justify-between pb-4 border-b border-white/[0.06] mb-5">
+        <span className="text-[12px] font-mono uppercase tracking-wider text-white/40">Prompt Activity Grid</span>
         {streakCount > 0 && (
-          <span className="text-[11px] text-[--accent-amber] font-medium">
-            {streakCount} day streak
+          <span className="text-[11px] font-mono font-semibold text-[--warning]">
+            {streakCount}d streak 🔥
           </span>
         )}
       </div>
 
       <div 
-        className="inline-grid gap-[2px]" 
+        className="inline-grid gap-[4px]" 
         style={{ 
-          gridTemplateColumns: "repeat(52, 10px)",
-          gridTemplateRows: "repeat(7, 10px)",
+          gridTemplateColumns: "repeat(20, 14px)",
+          gridTemplateRows: "repeat(7, 14px)",
           gridAutoFlow: "column"
         }}
       >
@@ -68,7 +58,7 @@ export function ContributionGrid({ streakCount, gridData }: ContributionGridProp
           <div
             key={i}
             title={`${cell.date}: ${cell.count} upgrades`}
-            className="w-[10px] h-[10px] rounded-[2px]"
+            className="w-[14px] h-[14px] rounded-[3px]"
             style={{
               backgroundColor: getCellColor(cell.count),
               outline: cell.date === todayStr ? "1px solid rgba(255,255,255,0.20)" : "none",

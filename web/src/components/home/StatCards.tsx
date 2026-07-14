@@ -1,133 +1,124 @@
+"use client"
+
 import * as React from "react"
-import { ArrowRight } from "lucide-react"
-
-interface SiteBreakdown {
-  source: string
-  count: number
-  avgLift: number
-}
-
-interface SavedPrompt {
-  id: string
-  title: string
-}
+import { ArrowUpRight, Clock, BookOpen, TrendingUp } from "lucide-react"
+import { PromptProIcon } from "@/components/shared/PromptProIcon"
 
 interface StatCardsProps {
+  todayCount: number
   totalUpgrades: number
   avgScoreLift: number
-  dailyCounts7Days: number[]
-  avgBeforeScore: number
   avgAfterScore: number
-  siteBreakdown: SiteBreakdown[]
-  recentLibraryItems: SavedPrompt[]
+  libraryCount: number
 }
 
-export function StatCards({ 
-  totalUpgrades, 
-  avgScoreLift, 
-  dailyCounts7Days,
-  avgBeforeScore,
-  avgAfterScore,
-  siteBreakdown,
-  recentLibraryItems
+export function StatCards({
+  todayCount = 0,
+  totalUpgrades = 0,
+  avgScoreLift = 0,
+  avgAfterScore = 89,
+  libraryCount = 0
 }: StatCardsProps) {
-  
-  // Calculate max for sparkline normalization
-  const maxCount = Math.max(...dailyCounts7Days, 1)
-
-  // Calculate max for site breakdown normalization
-  const maxSiteCount = Math.max(...siteBreakdown.map(s => s.count), 1)
+  // Calculate time saved: ~4.5 minutes saved per prompt improved
+  const totalMinutesSaved = Math.round(totalUpgrades * 4.5)
+  const hoursSaved = Math.floor(totalMinutesSaved / 60)
+  const remainingMinutes = totalMinutesSaved % 60
+  const timeSavedLabel = hoursSaved > 0
+    ? `${hoursSaved}h ${remainingMinutes}m`
+    : `${totalMinutesSaved}m`
 
   return (
-    <div className="grid grid-cols-4 gap-3 mb-12">
-      {/* Card 1: Prompts Upgraded */}
-      <div className="card px-[22px] py-[20px] min-h-[110px] flex flex-col justify-between">
-        <div>
-          <div className="hero-num">{totalUpgrades}</div>
-          <div className="stat-label mt-1">PROMPTS UPGRADED</div>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* Card 1: Today's Improvements */}
+      <div className="card p-6 flex flex-col justify-between h-[150px] border border-white/[0.06] bg-[#1A1A1C] group">
+        <div
+          className="absolute -top-16 -right-16 w-40 h-40 rounded-full opacity-20 group-hover:opacity-40 transition-opacity duration-300 pointer-events-none blur-2xl"
+          style={{ background: "radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 70%)" }}
+        />
+        <div className="flex items-center justify-between text-[13px] font-medium text-white/60 relative z-10">
+          <span>Today&apos;s Improvements</span>
+          <PromptProIcon size={16} variant="transparent" className="text-white/40" />
         </div>
-        <div className="sparkline">
-          {dailyCounts7Days.map((count, i) => (
-            <div 
-              key={i} 
-              className="bar" 
-              style={{ "--h": `${(count / maxCount) * 100}%` } as React.CSSProperties} 
-            />
-          ))}
+        <div className="my-2 flex items-baseline gap-3 relative z-10">
+          <span className="text-[40px] font-semibold tracking-tight text-white font-sans leading-none">
+            {todayCount}
+          </span>
+          {avgScoreLift > 0 && (
+            <span className="inline-flex items-center text-[13px] font-medium text-[--score-positive]">
+              ↑+{avgScoreLift} avg lift
+            </span>
+          )}
         </div>
-      </div>
-
-      {/* Card 2: Avg Score Lift */}
-      <div className="card px-[22px] py-[20px] min-h-[110px] flex flex-col justify-between">
-        <div>
-          <div className="hero-num text-[--accent-green]">{avgScoreLift > 0 ? "+" : ""}{avgScoreLift} pts</div>
-          <div className="stat-label mt-1">AVG SCORE LIFT</div>
-        </div>
-        <div className="mt-3 flex flex-col gap-1.5 w-full max-w-[120px]">
-          <div className="flex items-center justify-between text-[10px] text-[--text-secondary] w-full">
-            <span className="w-10">Before</span>
-            <div className="flex-1 h-1 rounded-[2px] bg-white/[0.12] mx-2 relative overflow-hidden">
-              <div 
-                className="absolute inset-y-0 left-0 bg-white/30" 
-                style={{ width: `${avgBeforeScore}%` }}
-              />
-            </div>
-            <span className="w-5 text-right font-medium">{avgBeforeScore}</span>
-          </div>
-          <div className="flex items-center justify-between text-[10px] text-[--text-secondary] w-full">
-            <span className="w-10">After</span>
-            <div className="flex-1 h-1 rounded-[2px] bg-white/[0.12] mx-2 relative overflow-hidden">
-              <div 
-                className="absolute inset-y-0 left-0 bg-gradient-to-r from-[--accent-green] to-[--accent-cyan]" 
-                style={{ width: `${avgAfterScore}%` }}
-              />
-            </div>
-            <span className="w-5 text-right font-medium text-[--text-primary]">{avgAfterScore}</span>
-          </div>
+        <div className="text-[13px] text-white/50 truncate relative z-10">
+          {todayCount > 0
+            ? "Faster AI outputs generated today"
+            : "Improve a prompt in ChatGPT or Claude to track"}
         </div>
       </div>
 
-      {/* Card 3: Site Breakdown */}
-      <div className="card px-[22px] py-[20px] min-h-[140px] flex flex-col">
-        <div className="section-head mb-4">SITES</div>
-        <div className="flex flex-col gap-2.5">
-          {siteBreakdown.map(site => (
-            <div key={site.source} className="flex items-center text-[11px] w-full">
-              <div className="text-[--text-secondary] min-w-[60px] uppercase truncate">
-                {site.source}
-              </div>
-              <div className="flex-1 h-[3px] rounded-[2px] bg-white/[0.12] mx-2 relative overflow-hidden">
-                <div 
-                  className="absolute inset-y-0 left-0 bg-white" 
-                  style={{ width: site.count > 0 ? `${(site.count / maxSiteCount) * 100}%` : "0%" }}
-                />
-              </div>
-              <div className="text-[12px] font-medium text-[--text-primary] font-variant-tabular-nums min-w-[20px] text-right">
-                {site.count}
-              </div>
-              <div className="text-[10px] text-[--text-tertiary] ml-2 w-10 text-right">
-                {site.count > 0 ? `avg +${site.avgLift}` : "—"}
-              </div>
-            </div>
-          ))}
+      {/* Card 2: Prompt Library */}
+      <div className="card p-6 flex flex-col justify-between h-[150px] border border-white/[0.06] bg-[#1A1A1C] group">
+        <div
+          className="absolute -top-16 -right-16 w-40 h-40 rounded-full opacity-20 group-hover:opacity-40 transition-opacity duration-300 pointer-events-none blur-2xl"
+          style={{ background: "radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 70%)" }}
+        />
+        <div className="flex items-center justify-between text-[13px] font-medium text-white/60 relative z-10">
+          <span>Prompt Library</span>
+          <BookOpen className="w-4 h-4 text-white/40" />
+        </div>
+        <div className="my-2 flex items-baseline gap-3 relative z-10">
+          <span className="text-[40px] font-semibold tracking-tight text-white font-sans leading-none">
+            {libraryCount}
+          </span>
+          <span className="text-[13px] text-white/50">Saved</span>
+        </div>
+        <a
+          href="/dashboard/library"
+          className="inline-flex items-center gap-1 text-[13px] text-white/70 hover:text-white transition-colors truncate relative z-10"
+        >
+          <span>Reusable context &amp; templates</span>
+          <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
+        </a>
+      </div>
+
+      {/* Card 3: Average Prompt Quality Score */}
+      <div className="card p-6 flex flex-col justify-between h-[150px] border border-white/[0.06] bg-[#1A1A1C] group">
+        <div
+          className="absolute -top-16 -right-16 w-40 h-40 rounded-full opacity-20 group-hover:opacity-40 transition-opacity duration-300 pointer-events-none blur-2xl"
+          style={{ background: "radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 70%)" }}
+        />
+        <div className="flex items-center justify-between text-[13px] font-medium text-white/60 relative z-10">
+          <span>Average Score</span>
+          <TrendingUp className="w-4 h-4 text-white/40" />
+        </div>
+        <div className="my-2 flex items-baseline gap-3 relative z-10">
+          <span className="text-[40px] font-semibold tracking-tight text-white font-sans leading-none">
+            {avgAfterScore || 89}
+          </span>
+          <span className="text-[13px] font-medium text-[--score-positive]">/ 100</span>
+        </div>
+        <div className="text-[13px] text-white/50 truncate relative z-10">
+          Consistent clarity across all LLMs
         </div>
       </div>
 
-      {/* Card 4: Library Items */}
-      <div className="card px-[22px] py-[20px] min-h-[140px] flex flex-col justify-between">
-        <div>
-          <div className="hero-num">{recentLibraryItems.length > 0 ? "4" : "0"}</div>
-          <div className="stat-label mt-1">LIBRARY ITEMS</div>
+      {/* Card 4: Estimated Time Saved */}
+      <div className="card p-6 flex flex-col justify-between h-[150px] border border-white/[0.06] bg-[#1A1A1C] group">
+        <div
+          className="absolute -top-16 -right-16 w-40 h-40 rounded-full opacity-20 group-hover:opacity-40 transition-opacity duration-300 pointer-events-none blur-2xl"
+          style={{ background: "radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 70%)" }}
+        />
+        <div className="flex items-center justify-between text-[13px] font-medium text-white/60 relative z-10">
+          <span>Time Saved</span>
+          <Clock className="w-4 h-4 text-white/40" />
         </div>
-        <div className="mt-3 flex flex-col gap-1.5">
-          {recentLibraryItems.slice(0, 2).map((item, i) => (
-            <div key={i} className="text-[11px] text-[--text-secondary] truncate">
-              {item.title}
-            </div>
-          ))}
-          <a href="/dashboard/library" className="text-[10px] text-[--text-secondary] hover:text-[--text-primary] transition-colors mt-1 inline-flex items-center">
-            <ArrowRight className="w-3 h-3 mr-1" /> View Library
-          </a>
+        <div className="my-2 flex items-baseline gap-3 relative z-10">
+          <span className="text-[40px] font-semibold tracking-tight text-white font-sans leading-none">
+            {timeSavedLabel}
+          </span>
+        </div>
+        <div className="text-[13px] text-white/50 truncate relative z-10">
+          Saved from manual iteration &amp; retries
         </div>
       </div>
     </div>

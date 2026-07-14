@@ -1,4 +1,5 @@
-import { Sparkles, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, ArrowLeft } from 'lucide-react';
+import { PromptSparkleIcon } from '@/components/shared/PromptSparkleIcon';
 import Link from 'next/link';
 
 /**
@@ -41,7 +42,7 @@ export default function ExtensionLinkedPage() {
             <span className="text-[10px] font-semibold text-zinc-300 tracking-wide uppercase">Cloud Sync Active</span>
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-            <Sparkles className="w-3 h-3 text-zinc-400" />
+            <PromptSparkleIcon size={12} className="text-zinc-400" />
             <span className="text-[10px] font-semibold text-zinc-300 tracking-wide uppercase">Data Merged</span>
           </div>
         </div>

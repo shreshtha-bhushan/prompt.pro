@@ -1,37 +1,36 @@
-import type { Metadata } from "next";
+import type { Metadata } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
-import "./globals.css";
+import { Geist, Geist_Mono } from 'next/font/google'
+import '../styles/tokens.css'
+import './globals.css'
+import { ExtensionSync } from '@/components/extension-sync'
 
-import { ExtensionSync } from "@/components/extension-sync";
+const geistSans = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
+const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
 export const metadata: Metadata = {
-  title: "PromptPro Web",
-  description: "PromptPro UI (shadcn + Next.js)",
-};
+  title: 'PromptPro',
+  description: 'Upgrade your prompts with PromptPro.',
+}
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
-      <body className="min-h-screen bg-[#050505] text-white antialiased selection:bg-white/10 selection:text-white">
-        <ClerkProvider
-          appearance={{
-            baseTheme: undefined, // Let our globals.css override, but we could use dark theme here
-            variables: {
-              colorPrimary: 'white',
-              colorBackground: '#111113',
-              colorText: 'white',
-              colorTextSecondary: '#a1a1aa',
-            }
-          }}
-        >
+    <ClerkProvider
+      appearance={{
+        variables: {
+          colorPrimary: 'white',
+          colorBackground: '#0d0d0d',
+          colorText: 'white',
+          colorTextSecondary: '#a1a1aa',
+        }
+      }}
+    >
+      <html lang="en" className={`dark ${geistSans.variable} ${geistMono.variable}`}>
+        <body>
           <ExtensionSync />
           {children}
-        </ClerkProvider>
-      </body>
-    </html>
-  );
+        </body>
+      </html>
+    </ClerkProvider>
+  )
 }

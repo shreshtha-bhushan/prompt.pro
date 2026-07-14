@@ -12,7 +12,7 @@ export default async function LibraryPage() {
   const token = await getToken({ template: 'supabase' })
 
   return (
-    <div className="flex flex-1 flex-col h-full min-h-0">
+    <div className="w-full p-6 md:p-8 max-w-full overflow-x-hidden">
       <LibraryClient userId={userId} clerkToken={token} />
     </div>
   )

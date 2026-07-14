@@ -163,6 +163,31 @@
   }
 
   // ═══════════════════════════════════════════════════════════════
+  // FLUSH TO CLOUD — Push ALL local data to Supabase before sign-out
+  // ═══════════════════════════════════════════════════════════════
+
+  async function flushLocalToCloud() {
+    if (!isAuthenticated()) return;
+    const db = promptDb || { history: [], library: [], contextBlocks: [] };
+    const history = (db.history || []).map(h => ({
+      text: h.text,
+      score: h.score,
+      originalText: h.originalText,
+      scoreBefore: h.scoreBefore,
+      site: h.site,
+      strategy: h.strategy
+    }));
+    const library = (db.library || []).map(l => ({ title: l.title, text: l.text }));
+    const contextBlocks = (db.contextBlocks || []).map(c => ({
+      title: c.title,
+      content: c.content,
+      active: c.active
+    }));
+    if (history.length === 0 && library.length === 0 && contextBlocks.length === 0) return;
+    await cloudWrite('bulkMerge', { history, library, contextBlocks });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   // DATA MERGE — Cloud + Local
   // ═══════════════════════════════════════════════════════════════
 
@@ -175,6 +200,28 @@
     if (!cloudData || !cloudData.success) {
       updateSyncStatus('error', 'Sync failed');
       return;
+    }
+
+    // ── User-switch detection: wipe local DB if a different user signs in ──
+    const currentUserId = authSession.user && authSession.user.id;
+    const storedData = await new Promise((resolve) =>
+      chrome.storage.local.get(['lastUserId'], resolve)
+    );
+    const lastUserId = storedData.lastUserId || null;
+
+    if (currentUserId && lastUserId && lastUserId !== currentUserId) {
+      // Different user — discard all previous local data
+      promptDb = { history: [], library: [], contextBlocks: [], historyLimit: 50 };
+      await new Promise((resolve) =>
+        chrome.storage.local.set({ promptDb }, resolve)
+      );
+    }
+
+    // Record the current user so we can detect future switches
+    if (currentUserId) {
+      await new Promise((resolve) =>
+        chrome.storage.local.set({ lastUserId: currentUserId }, resolve)
+      );
     }
 
     // Get current local data
@@ -281,9 +328,34 @@
     });
     if (!ok) return;
 
+    // ── Step 1: Flush all local data to Supabase BEFORE clearing ──
+    // This ensures the user's data is safely stored and restored on next sign-in.
+    updateSyncStatus('syncing', 'Saving your data…');
+    try {
+      await flushLocalToCloud();
+    } catch (e) {
+      console.warn('[PromptPro] Pre-signout flush failed:', e);
+    }
+
+    // ── Step 2: Snapshot session so we can still sign out on the dashboard ──
+    const sessionSnapshot = authSession;
     authSession = null;
-    await new Promise((resolve) => chrome.storage.local.set({ ignoreSyncUntil: Date.now() + 5000 }, resolve));
-    await new Promise((resolve) => chrome.storage.local.remove(['authSession', 'skipLogin'], resolve));
+
+    // ── Step 3: Clear local data so the next user starts fresh ──
+    promptDb = { history: [], library: [], contextBlocks: [], historyLimit: 50 };
+    await new Promise((resolve) =>
+      chrome.storage.local.set(
+        { ignoreSyncUntil: Date.now() + 5000, promptDb },
+        resolve
+      )
+    );
+    await new Promise((resolve) =>
+      chrome.storage.local.remove(['authSession', 'skipLogin', 'lastUserId'], resolve)
+    );
+
+    renderTabContent('history');
+    renderTabContent('library');
+    renderTabContent('context');
 
     // Sign out from the dashboard: redirect existing tab if open, otherwise use a temporary background tab
     chrome.tabs.query({ url: ['*://prompt-pro-liart.vercel.app/*', '*://localhost/*'] }, (tabs) => {

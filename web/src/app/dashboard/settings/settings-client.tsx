@@ -181,16 +181,16 @@ export function SettingsClient({ userId, clerkToken }: { userId: string, clerkTo
         <Button 
           onClick={handleSavePreferences}
           disabled={isSaving}
-          className="bg-[--text-primary] text-[--bg-base] hover:bg-[--text-secondary] px-8 py-6 rounded-xl transition-all shadow-lg"
+          className="bg-white text-[#111111] hover:bg-white/90 font-semibold px-8 h-12 rounded-xl transition-all shadow-[0_0_20px_rgba(255,255,255,0.15)] hover:shadow-[0_0_25px_rgba(255,255,255,0.25)] flex items-center justify-center gap-2"
         >
           {isSaving ? (
-            <span className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full border-2 border-[--bg-base] border-t-transparent animate-spin" />
+            <span className="flex items-center gap-2 text-[#111111]">
+              <div className="w-4 h-4 rounded-full border-2 border-[#111111] border-t-transparent animate-spin" />
               Saving...
             </span>
           ) : (
-            <span className="flex items-center gap-2 font-medium">
-              <SaveIcon className="w-4 h-4" />
+            <span className="flex items-center gap-2 font-semibold text-[#111111]">
+              <SaveIcon className="w-4 h-4 text-[#111111]" />
               Save Preferences
             </span>
           )}

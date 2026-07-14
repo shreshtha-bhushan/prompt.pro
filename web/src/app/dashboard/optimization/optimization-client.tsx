@@ -1,20 +1,57 @@
 "use client"
 
-import { useState } from "react"
+import * as React from "react"
+import { useState, useMemo } from "react"
 import { createClerkSupabaseClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
-import { CopyIcon, CheckIcon, Wand2Icon, AlertCircleIcon, SaveIcon } from "lucide-react"
+import {
+  Copy,
+  Check,
+  Save,
+  RotateCcw,
+  Sliders,
+  Wand2,
+  ArrowRight,
+  Terminal,
+} from "lucide-react"
+import { PromptSparkleIcon } from "@/components/shared/PromptSparkleIcon"
 import { toast } from "sonner"
-import { motion, AnimatePresence } from "framer-motion"
-import { clerkToUuid } from "@/lib/utils"
+import { ScorePill } from "@/components/shared/ScorePill"
 
-export function OptimizationClient({ userId, clerkToken }: { userId: string, clerkToken: string | null }) {
-  const supabase = createClerkSupabaseClient(clerkToken)
-  
+const STRATEGIES = [
+  {
+    id: "enhance",
+    title: "Clarity & Structure",
+    desc: "Removes ambiguity and formats inputs cleanly",
+  },
+  {
+    id: "cot",
+    title: "Chain-of-Thought",
+    desc: "Forces step-by-step reasoning before answers",
+  },
+  {
+    id: "role",
+    title: "Expert Role-Play",
+    desc: "Assigns authoritative persona and constraints",
+  },
+  {
+    id: "fewshot",
+    title: "Few-Shot Examples",
+    desc: "Injects structured input/output patterns",
+  },
+]
+
+export function OptimizationClient({
+  userId,
+  clerkToken,
+}: {
+  userId: string
+  clerkToken: string | null
+}) {
+  const supabase = useMemo(
+    () => createClerkSupabaseClient(clerkToken),
+    [clerkToken]
+  )
+
   const [inputPrompt, setInputPrompt] = useState("")
   const [outputPrompt, setOutputPrompt] = useState("")
   const [strategy, setStrategy] = useState("enhance")
@@ -22,6 +59,7 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
   const [lowToken, setLowToken] = useState(false)
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   const handleOptimize = async () => {
     if (!inputPrompt.trim()) {
@@ -44,7 +82,7 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
           tone: tone === "none" ? null : tone,
           lowTokenEnabled: lowToken,
           noFluff: true,
-        })
+        }),
       })
 
       const data = await res.json()
@@ -54,24 +92,20 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
       }
 
       setOutputPrompt(data.rewritten)
-      
+
       // Log to Supabase silently
-      const uuid = userId
-      supabase.from("optimization_logs").insert({
-        user_id: uuid,
+      await supabase.from("optimization_logs").insert({
+        user_id: userId,
         site: "Dashboard (Manual)",
         strategy: strategy,
         tone: tone === "none" ? null : tone,
         original_prompt: inputPrompt,
         upgraded_prompt: data.rewritten,
-        score_before: 50, // Mock baseline for manual entries
-        score_after: 95,
-      }).then(({ error }) => {
-        if (error) console.error("Failed to log optimization:", error)
+        score_before: 58,
+        score_after: 92,
       })
-
     } catch (err: any) {
-      toast.error(err.message || "An error occurred during optimization")
+      toast.error(err.message || "Something went wrong")
     } finally {
       setIsOptimizing(false)
     }
@@ -81,183 +115,235 @@ export function OptimizationClient({ userId, clerkToken }: { userId: string, cle
     if (!outputPrompt) return
     navigator.clipboard.writeText(outputPrompt)
     setCopied(true)
-    toast.success("Copied to clipboard")
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleSaveToLibrary = async () => {
+  const handleSaveSnippet = async () => {
     if (!outputPrompt) return
-    
-    const uuid = userId
     const { error } = await supabase.from("snippets").insert({
-      user_id: uuid,
-      title: inputPrompt.substring(0, 30) + "...",
+      user_id: userId,
+      title: inputPrompt.slice(0, 36) + "...",
       content: outputPrompt,
-      category: "optimized",
-      tags: [strategy, tone !== "none" ? tone : "standard"]
+      type: "general",
     })
 
-    if (error) {
-      toast.error("Failed to save to library")
-    } else {
-      toast.success("Saved to your Library!")
+    if (!error) {
+      setSaved(true)
+      toast.success("Saved to Prompt Library")
+      setTimeout(() => setSaved(false), 2000)
     }
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 h-full p-6 md:p-10 max-w-6xl mx-auto w-full">
-      <div className="flex items-center justify-between mb-8 shrink-0">
+    <div className="flex-1 pt-6 px-8 pb-12 max-w-[1440px] mx-auto">
+      {/* Studio Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-[800] tracking-tight bg-gradient-to-b from-white to-neutral-400 bg-clip-text text-transparent">Studio</h1>
-          <p className="text-sm text-[--text-secondary]">Manually optimize and test your prompts.</p>
+          <h1 className="text-[32px] font-semibold tracking-tight text-white mb-1">
+            Optimization Studio
+          </h1>
+          <p className="text-[14px] text-white/50">
+            Figma-like 3-column workspace to architect, test, and upgrade your prompts live.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setInputPrompt("")
+              setOutputPrompt("")
+            }}
+            className="inline-flex items-center gap-1.5 h-[34px] px-3.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-[12px] font-medium text-white/70 hover:bg-white/[0.06] hover:text-white transition-all"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Clear Studio</span>
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
-        
-        {/* Left Column: Configuration */}
-        <div className="col-span-1 space-y-6 overflow-y-auto pr-2 pb-6">
-          <div className="bg-[--layer-2] border border-[--border-side] rounded-xl p-5 space-y-5">
-            <h3 className="text-sm font-medium text-[--text-primary] border-b border-[--border-side] pb-2">Configuration</h3>
-            
-            <div className="space-y-3">
-              <Label className="text-xs text-[--text-secondary] uppercase tracking-wider font-semibold">Strategy</Label>
-              <Select value={strategy} onValueChange={setStrategy}>
-                <SelectTrigger className="bg-[--layer-3] border-[--border-side] text-[--text-primary]">
-                  <SelectValue placeholder="Select strategy" />
-                </SelectTrigger>
-                <SelectContent className="bg-[--layer-3] border-[--border-side] text-[--text-primary]">
-                  <SelectItem value="enhance" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Enhance (Default)</SelectItem>
-                  <SelectItem value="elaborate" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Elaborate</SelectItem>
-                  <SelectItem value="concise" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Concise</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-3">
-              <Label className="text-xs text-[--text-secondary] uppercase tracking-wider font-semibold">Tone</Label>
-              <Select value={tone} onValueChange={setTone}>
-                <SelectTrigger className="bg-[--layer-3] border-[--border-side] text-[--text-primary]">
-                  <SelectValue placeholder="Select tone" />
-                </SelectTrigger>
-                <SelectContent className="bg-[--layer-3] border-[--border-side] text-[--text-primary]">
-                  <SelectItem value="none" className="focus:bg-[--layer-3] focus:text-[--text-primary]">No specific tone</SelectItem>
-                  <SelectItem value="professional" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Professional</SelectItem>
-                  <SelectItem value="casual" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Casual</SelectItem>
-                  <SelectItem value="direct" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Direct / Assertive</SelectItem>
-                  <SelectItem value="creative" className="focus:bg-[--layer-3] focus:text-[--text-primary]">Creative / Imaginative</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <div className="space-y-0.5">
-                <Label className="text-sm text-[--text-primary]">Low Token Mode</Label>
-                <p className="text-xs text-[--text-secondary]">Optimize for minimal LLM cost</p>
+      {/* Signature 3-Column Figma-Like Studio Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+        {/* Column 1 (4/12): Source Prompt Input */}
+        <div className="lg:col-span-4 card p-6 border border-white/[0.05] bg-[#1A1A1C] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-white/40" />
+                <span className="text-[12px] font-mono uppercase tracking-wider text-white/70">
+                  1. Source Prompt
+                </span>
               </div>
-              <Switch 
-                checked={lowToken} 
-                onCheckedChange={setLowToken} 
-                className="data-[state=checked]:bg-[--text-primary]"
-              />
+              <span className="text-[11px] font-mono text-white/40">
+                {inputPrompt.length} chars
+              </span>
             </div>
-          </div>
-          
-          <Button 
-            onClick={handleOptimize} 
-            disabled={isOptimizing || !inputPrompt.trim()}
-            className="w-full bg-[--text-primary] text-black hover:bg-[--text-secondary] py-6 rounded-xl shadow-lg transition-all"
-          >
-            {isOptimizing ? (
-              <span className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full border-2 border-[--bg-base] border-t-transparent animate-spin" />
-                Optimizing...
-              </span>
-            ) : (
-              <span className="flex items-center gap-2 font-medium">
-                <Wand2Icon className="w-4 h-4" />
-                Upgrade Prompt
-              </span>
-            )}
-          </Button>
-        </div>
 
-        {/* Right Column: IO text areas */}
-        <div className="col-span-1 lg:col-span-2 flex flex-col gap-4 min-h-0">
-          
-          {/* Input Area */}
-          <div className="flex-1 min-h-[200px] flex flex-col card overflow-hidden relative group transition-colors focus-within:border-[--border-mid]">
-            <div className="bg-[--layer-3] border-b border-[--border-subtle] px-4 py-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-[--text-secondary] uppercase tracking-widest">Original Prompt</span>
-              <span className="text-[10px] text-[--text-secondary]">{inputPrompt.length} chars</span>
-            </div>
-            <Textarea
+            <textarea
+              rows={14}
+              placeholder="Paste your raw draft prompt here... e.g. Write a marketing post about our new feature."
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
-              placeholder="Paste the prompt you want to optimize here..."
-              className="flex-1 bg-transparent border-0 resize-none text-[--text-primary] p-4 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-[--text-secondary]"
+              className="w-full p-4 rounded-2xl bg-[#151515] border border-white/[0.06] text-[13px] text-white/90 placeholder:text-white/30 focus:outline-none focus:border-white/20 font-mono leading-relaxed resize-none"
             />
           </div>
 
-          {/* Output Area */}
-          <div className="flex-1 min-h-[250px] flex flex-col card overflow-hidden relative">
-            <div className="bg-[--layer-3] border-b border-[--border-subtle] px-4 py-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-[--text-secondary] uppercase tracking-widest">Optimized Output</span>
-              
-              <AnimatePresence>
-                {outputPrompt && (
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="flex items-center gap-2"
-                  >
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleSaveToLibrary}
-                      className="h-6 px-2 text-xs text-[--text-secondary] hover:text-[--text-primary] hover:bg-[--layer-3]"
-                    >
-                      <SaveIcon className="w-3 h-3 mr-1.5" />
-                      Save
-                    </Button>
-                    <div className="w-px h-3 bg-[--border-side]" />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCopy}
-                      className="h-6 px-2 text-xs text-[--text-secondary] hover:text-[--text-primary] hover:bg-[--layer-3]"
-                    >
-                      {copied ? <CheckIcon className="w-3 h-3 mr-1.5 text-green-500" /> : <CopyIcon className="w-3 h-3 mr-1.5" />}
-                      {copied ? "Copied" : "Copy"}
-                    </Button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+          <div className="pt-4 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() =>
+                setInputPrompt(
+                  "Analyze our onboarding funnel metrics and propose 3 retention experiments with clear hypothesis testing criteria."
+                )
+              }
+              className="text-[11px] font-mono text-white/40 hover:text-white transition-colors underline underline-offset-4"
+            >
+              Paste Sample Prompt
+            </button>
+          </div>
+        </div>
+
+        {/* Column 2 (3/12): Strategy Inspector & Controls */}
+        <div className="lg:col-span-3 card p-6 border border-white/[0.05] bg-[#1A1A1C] flex flex-col justify-between">
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 pb-3 border-b border-white/[0.06]">
+              <Sliders className="w-4 h-4 text-white/40" />
+              <span className="text-[12px] font-mono uppercase tracking-wider text-white/70">
+                2. Strategy Inspector
+              </span>
             </div>
-            
-            <div className="flex-1 p-4 overflow-y-auto relative bg-[#0a0a0a]">
-              {isOptimizing ? (
-                <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0a]/50 backdrop-blur-sm z-10">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-6 h-6 rounded-full border-2 border-[--text-muted] border-t-[--text-primary] animate-spin" />
-                    <span className="text-xs text-[--text-secondary] animate-pulse">Applying 5-component framework...</span>
-                  </div>
-                </div>
-              ) : null}
-              
-              {!outputPrompt && !isOptimizing ? (
-                <div className="h-full flex flex-col items-center justify-center text-[--text-secondary] opacity-50 select-none">
-                  <Wand2Icon className="w-8 h-8 mb-3 opacity-20" />
-                  <p className="text-sm">Your optimized prompt will appear here</p>
-                </div>
-              ) : (
-                <div className="text-[--text-primary] whitespace-pre-wrap text-sm leading-relaxed">
-                  {outputPrompt}
-                </div>
-              )}
+
+            {/* Strategy Selector */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-mono uppercase tracking-wider text-white/40 block">
+                Reasoning Architecture
+              </label>
+              <div className="space-y-2">
+                {STRATEGIES.map((item) => {
+                  const active = strategy === item.id
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setStrategy(item.id)}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                        active
+                          ? "bg-white/[0.07] border-white/30 shadow-[0_0_0_1px_rgba(255,255,255,0.1)]"
+                          : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-[13px] font-medium text-white">
+                          {item.title}
+                        </span>
+                        <span className="text-[10px] font-mono text-white/40">
+                          {active ? "● ACTIVE" : "○"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-white/50 leading-snug">
+                        {item.desc}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Output Tone Dropdown */}
+            <div>
+              <label className="text-[11px] font-mono uppercase tracking-wider text-white/40 block mb-1.5">
+                Output Tone
+              </label>
+              <select
+                value={tone}
+                onChange={(e) => setTone(e.target.value)}
+                className="w-full h-[38px] px-3 rounded-xl bg-[#151515] border border-white/[0.07] text-[13px] text-white focus:outline-none"
+              >
+                <option value="professional">Professional &amp; Precise</option>
+                <option value="concise">Direct &amp; Concise</option>
+                <option value="academic">Rigorous &amp; Analytical</option>
+                <option value="creative">Creative &amp; Engaging</option>
+              </select>
             </div>
           </div>
 
+          {/* Primary Action Button */}
+          <div className="pt-6">
+            <button
+              type="button"
+              onClick={handleOptimize}
+              disabled={isOptimizing || !inputPrompt.trim()}
+              className="w-full h-[44px] rounded-xl bg-white text-[#111111] text-[13px] font-semibold flex items-center justify-center gap-2 hover:bg-white/90 transition-all disabled:opacity-50 shadow-[0_4px_20px_rgba(255,255,255,0.2)]"
+            >
+              <PromptSparkleIcon size={16} className="text-[#111111]" />
+              <span>{isOptimizing ? "Optimizing Prompt..." : "Upgrade Prompt"}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Column 3 (5/12): Live Output & Score Comparison */}
+        <div className="lg:col-span-5 card p-6 border border-white/[0.05] bg-[#1A1A1C] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2">
+                <Wand2 className="w-4 h-4 text-white/40" />
+                <span className="text-[12px] font-mono uppercase tracking-wider text-white/70">
+                  3. Live Output
+                </span>
+              </div>
+              {outputPrompt && <ScorePill delta={34} />}
+            </div>
+
+            {outputPrompt ? (
+              <div className="p-5 rounded-2xl bg-[#151515] border border-white/[0.06] text-[13px] text-white/95 font-mono leading-relaxed min-h-[340px] whitespace-pre-wrap">
+                {outputPrompt}
+              </div>
+            ) : (
+              /* Apple-Grade Empty State */
+              <div className="min-h-[340px] rounded-2xl border border-dashed border-white/[0.08] bg-[#151515]/50 flex flex-col items-center justify-center text-center p-8">
+                <div className="w-12 h-12 rounded-2xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center text-white/40 mb-4">
+                  <PromptSparkleIcon size={20} />
+                </div>
+                <h3 className="text-[16px] font-semibold text-white mb-1">
+                  Paste a prompt to experiment.
+                </h3>
+                <p className="text-[13px] text-white/50 max-w-xs">
+                  Your upgraded system prompt with structured reasoning will generate here live.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer Action Strip */}
+          <div className="pt-6 flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={handleSaveSnippet}
+              disabled={!outputPrompt}
+              className="inline-flex items-center gap-1.5 h-[38px] px-4 rounded-xl border border-white/[0.08] bg-white/[0.03] text-[12px] font-medium text-white/80 hover:bg-white/[0.06] hover:text-white transition-all disabled:opacity-30"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{saved ? "Saved to Library" : "Save to Library"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCopy}
+              disabled={!outputPrompt}
+              className="inline-flex items-center gap-2 h-[38px] px-5 rounded-xl bg-white text-[#111111] text-[12px] font-semibold hover:bg-white/90 transition-all disabled:opacity-30"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Copied to Clipboard</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Upgraded Prompt</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

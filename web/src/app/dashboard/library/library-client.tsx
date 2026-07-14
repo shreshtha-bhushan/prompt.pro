@@ -1,9 +1,18 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import * as React from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { createClerkSupabaseClient } from "@/lib/supabase/client"
-import { Trash2Icon, CheckIcon, PlusIcon } from "lucide-react"
-
+import {
+  BookOpen,
+  Plus,
+  Search,
+  Copy,
+  Check,
+  Trash2,
+  FolderOpen,
+} from "lucide-react"
+import { PromptSparkleIcon } from "@/components/shared/PromptSparkleIcon"
 import {
   Dialog,
   DialogContent,
@@ -22,33 +31,51 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 
-export function LibraryClient({ userId, clerkToken }: { userId: string, clerkToken: string | null }) {
-  const supabase = createClerkSupabaseClient(clerkToken)
-  
+const NOTE_CATEGORIES = [
+  { id: "all", label: "All Notes" },
+  { id: "brand", label: "Brand Voice" },
+  { id: "research", label: "Research Context" },
+  { id: "tech", label: "Next.js & Stack" },
+  { id: "general", label: "General Templates" },
+]
+
+export function LibraryClient({
+  userId,
+  clerkToken,
+}: {
+  userId: string
+  clerkToken: string | null
+}) {
+  const supabase = useMemo(
+    () => createClerkSupabaseClient(clerkToken),
+    [clerkToken]
+  )
+
   const [snippets, setSnippets] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [activeCategory, setActiveCategory] = useState("all")
-  
-  // Dialog State
+  const [searchQuery, setSearchQuery] = useState("")
+
+  // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [newTitle, setNewTitle] = useState("")
   const [newContent, setNewContent] = useState("")
-  const [newType, setNewType] = useState<"snippet" | "context">("snippet")
-  
-
+  const [newCategory, setNewCategory] = useState("brand")
+  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const fetchSnippets = useCallback(async () => {
-    const uuid = userId
+    setLoading(true)
     const { data } = await supabase
       .from("snippets")
       .select("*")
-      .eq("user_id", uuid)
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
-      
-    if (data) setSnippets(data)
+
+    if (data) {
+      setSnippets(data)
+    }
+    setLoading(false)
   }, [supabase, userId])
 
   useEffect(() => {
@@ -58,192 +85,325 @@ export function LibraryClient({ userId, clerkToken }: { userId: string, clerkTok
   const handleSave = async () => {
     if (!newTitle.trim() || !newContent.trim()) return
 
-    const uuid = userId
     const { data, error } = await supabase
       .from("snippets")
-      .insert({
-        user_id: uuid,
-        title: newTitle.trim(),
-        content: newContent.trim(),
-        type: newType
-      })
+      .insert([
+        {
+          user_id: userId,
+          title: newTitle.trim(),
+          content: newContent.trim(),
+          type: newCategory,
+        },
+      ])
       .select()
 
     if (!error && data) {
-      const updatedSnippets = [data[0], ...snippets]
-      setSnippets(updatedSnippets)
+      setSnippets((prev) => [data[0], ...prev])
       setIsDialogOpen(false)
       setNewTitle("")
       setNewContent("")
-      setNewType("snippet")
-      
-      // Sync to extension
-      window.postMessage({ type: "PROMPTPRO_SYNC", payload: updatedSnippets }, "*")
     }
   }
 
   const handleDelete = async (id: string) => {
-    const { error } = await supabase.from("snippets").delete().eq("id", id)
+    const { error } = await supabase
+      .from("snippets")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId)
+
     if (!error) {
-      const updatedSnippets = snippets.filter(s => s.id !== id)
-      setSnippets(updatedSnippets)
-      window.postMessage({ type: "PROMPTPRO_SYNC", payload: updatedSnippets }, "*")
+      setSnippets((prev) => prev.filter((item) => item.id !== id))
     }
   }
 
-  const filteredSnippets = snippets.filter(s => activeCategory === "all" || s.type === activeCategory)
-  
-  const allCount = snippets.length
-  const snippetCount = snippets.filter(s => s.type === "snippet").length
-  const contextCount = snippets.filter(s => s.type === "context").length
+  const handleClearAll = async () => {
+    if (snippets.length === 0) return
+    const { error } = await supabase
+      .from("snippets")
+      .delete()
+      .eq("user_id", userId)
+
+    if (!error) {
+      setSnippets([])
+    }
+  }
+
+  const handleCopy = (id: string, text: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  // Filter snippets
+  const filteredSnippets = useMemo(() => {
+    return snippets.filter((s) => {
+      const matchesCat =
+        activeCategory === "all" || s.type === activeCategory
+      const matchesSearch =
+        !searchQuery.trim() ||
+        (s.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.content || "").toLowerCase().includes(searchQuery.toLowerCase())
+      return matchesCat && matchesSearch
+    })
+  }, [snippets, activeCategory, searchQuery])
 
   return (
-    <div className="flex h-full min-h-0">
-      {/* Left Sidebar */}
-      <div className="w-[280px] shrink-0 border-r border-[--border-side] bg-[#111113] flex flex-col p-6">
-        <h2 className="text-2xl font-[800] tracking-tight bg-gradient-to-b from-white to-neutral-400 bg-clip-text text-transparent mb-6">Library</h2>
-        
-        <div className="flex flex-col gap-2 flex-1">
-          <button 
-            onClick={() => setActiveCategory("all")}
-            className={`flex items-center justify-between text-sm py-1.5 px-3 -ml-3 rounded transition-colors ${activeCategory === "all" ? 'text-[--text-primary] border-l-2 border-[--text-primary] bg-[rgba(255,255,255,0.04)]' : 'text-[--text-secondary] hover:text-[--text-primary] hover:bg-[rgba(255,255,255,0.02)] border-l-2 border-transparent'}`}
-          >
-            <span>All Items</span>
-            <span className="text-[11px] bg-[--layer-3] px-1.5 py-0.5 rounded-full text-[--text-secondary]">{allCount}</span>
-          </button>
-
-          <button 
-            onClick={() => setActiveCategory("snippet")}
-            className={`flex items-center justify-between text-sm py-1.5 px-3 -ml-3 rounded transition-colors ${activeCategory === "snippet" ? 'text-[--text-primary] border-l-2 border-[--text-primary] bg-[rgba(255,255,255,0.04)]' : 'text-[--text-secondary] hover:text-[--text-primary] hover:bg-[rgba(255,255,255,0.02)] border-l-2 border-transparent'}`}
-          >
-            <span>Prompt Snippets</span>
-            <span className="text-[11px] bg-[--layer-3] px-1.5 py-0.5 rounded-full text-[--text-secondary]">{snippetCount}</span>
-          </button>
-
-          <button 
-            onClick={() => setActiveCategory("context")}
-            className={`flex items-center justify-between text-sm py-1.5 px-3 -ml-3 rounded transition-colors ${activeCategory === "context" ? 'text-[--text-primary] border-l-2 border-[--text-primary] bg-[rgba(255,255,255,0.04)]' : 'text-[--text-secondary] hover:text-[--text-primary] hover:bg-[rgba(255,255,255,0.02)] border-l-2 border-transparent'}`}
-          >
-            <span>Context Blocks</span>
-            <span className="text-[11px] bg-[--layer-3] px-1.5 py-0.5 rounded-full text-[--text-secondary]">{contextCount}</span>
-          </button>
+    <div className="flex-1 pt-6 px-8 pb-12 max-w-[1440px] mx-auto">
+      {/* Apple Notes Header & Toolbar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-[32px] font-semibold tracking-tight text-white mb-1">
+            Prompt Library
+          </h1>
+          <p className="text-[14px] text-white/50">
+            Apple Notes-style visual library for your system contexts, brand voices, and templates.
+          </p>
         </div>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" className="w-full justify-start bg-transparent border border-dashed border-[--border-mid] text-[--text-secondary] hover:text-[--text-primary] hover:bg-[rgba(255,255,255,0.02)]">
-              <PlusIcon className="w-4 h-4 mr-2" />
-              New Snippet
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="bg-[#111113] border border-[--border-side] text-[--text-primary] sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>Add to Library</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-5 py-4">
-              <div className="space-y-2">
-                <label className="text-xs uppercase tracking-wide text-[--text-secondary]">Title</label>
-                <Input 
-                  value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
-                  placeholder="e.g. SEO Persona Context"
-                  className="bg-[--layer-3] border-[--border-side] text-sm"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-xs uppercase tracking-wide text-[--text-secondary]">Type</label>
-                <div className="flex bg-[--layer-3] p-1 rounded-lg w-fit border border-[--border-side]">
-                  <button 
-                    onClick={() => setNewType("snippet")}
-                    className={`text-xs px-3 py-1.5 rounded-md transition-colors ${newType === "snippet" ? 'bg-[rgba(255,255,255,0.1)] text-[--text-primary]' : 'text-[--text-secondary] hover:text-[--text-secondary]'}`}
+        <div className="flex items-center gap-3">
+          <div className="relative w-[240px]">
+            <Search className="w-3.5 h-3.5 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search library notes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-[36px] pl-9 pr-3 rounded-xl bg-white/[0.04] border border-white/[0.07] text-[13px] text-white placeholder:text-white/30 focus:outline-none focus:border-white/20"
+            />
+          </div>
+
+          {/* Monotone Bin Icon -> turns red on hover -> opens Shadcn AlertDialog */}
+          {snippets.length > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button
+                  type="button"
+                  title="Clear all prompt notes"
+                  className="w-[36px] h-[36px] rounded-xl bg-[#1A1A1C] border border-white/[0.08] text-white/50 hover:text-red-400 hover:border-red-500/40 hover:bg-red-500/10 flex items-center justify-center transition-all shrink-0"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="bg-[#1A1A1C] border border-white/[0.1] text-white rounded-2xl max-w-md">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-[18px] font-semibold text-white">
+                    Clear All Saved Notes?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="text-[13px] text-white/60">
+                    This will permanently delete all your prompt library notes and templates. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter className="mt-4 gap-2">
+                  <AlertDialogCancel className="rounded-xl bg-white/[0.06] border border-white/[0.08] text-white/80 hover:bg-white/[0.1] hover:text-white text-[13px] h-9 px-4">
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleClearAll}
+                    className="rounded-xl bg-red-500/80 hover:bg-red-500 text-white font-medium text-[13px] h-9 px-4"
                   >
-                    Prompt Snippet
+                    Clear All Notes
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 h-[36px] px-4 rounded-xl bg-white text-[#111111] text-[13px] font-semibold hover:bg-white/90 transition-all shadow-[0_2px_12px_rgba(255,255,255,0.15)] shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>New Note</span>
+              </button>
+            </DialogTrigger>
+            <DialogContent className="bg-[#1A1A1C] border border-white/[0.07] text-white sm:max-w-[540px] p-6 rounded-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-[18px] font-semibold text-white">
+                  Save Reusable Prompt Note
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-2">
+                <div>
+                  <label className="text-[12px] font-mono text-white/50 uppercase mb-1.5 block">
+                    Category
+                  </label>
+                  <select
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    className="w-full h-[38px] px-3 rounded-xl bg-[#151515] border border-white/[0.08] text-[13px] text-white focus:outline-none"
+                  >
+                    <option value="brand">Brand Voice</option>
+                    <option value="research">Research Context</option>
+                    <option value="tech">Next.js &amp; Tech Stack</option>
+                    <option value="general">General Templates</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[12px] font-mono text-white/50 uppercase mb-1.5 block">
+                    Title
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Executive Summary Tone"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    className="w-full h-[38px] px-3 rounded-xl bg-[#151515] border border-white/[0.08] text-[13px] text-white placeholder:text-white/30 focus:outline-none focus:border-white/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[12px] font-mono text-white/50 uppercase mb-1.5 block">
+                    Prompt Context Content
+                  </label>
+                  <textarea
+                    rows={6}
+                    placeholder="Enter the reusable system prompt or context..."
+                    value={newContent}
+                    onChange={(e) => setNewContent(e.target.value)}
+                    className="w-full p-3 rounded-xl bg-[#151515] border border-white/[0.08] text-[13px] text-white placeholder:text-white/30 focus:outline-none focus:border-white/20 font-mono leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDialogOpen(false)}
+                    className="h-[36px] px-4 rounded-xl border border-white/[0.08] text-[13px] text-white/70 hover:bg-white/[0.05]"
+                  >
+                    Cancel
                   </button>
-                  <button 
-                    onClick={() => setNewType("context")}
-                    className={`text-xs px-3 py-1.5 rounded-md transition-colors ${newType === "context" ? 'bg-[rgba(255,255,255,0.1)] text-[--text-primary]' : 'text-[--text-secondary] hover:text-[--text-secondary]'}`}
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={!newTitle.trim() || !newContent.trim()}
+                    className="h-[36px] px-5 rounded-xl bg-white text-[#111111] text-[13px] font-semibold hover:bg-white/90 disabled:opacity-50"
                   >
-                    Context Block
+                    Save Note
                   </button>
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <label className="text-xs uppercase tracking-wide text-[--text-secondary]">Content</label>
-                <Textarea 
-                  value={newContent}
-                  onChange={e => setNewContent(e.target.value)}
-                  rows={6}
-                  placeholder="Paste the prompt or context content here..."
-                  className="bg-[--layer-3] border-[--border-side] text-sm font-mono resize-none"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <Button onClick={handleSave} className="bg-[--layer-3] border border-[--border-mid] text-[--text-primary] hover:bg-[rgba(255,255,255,0.1)]">
-                Save
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
-      {/* Main Grid */}
-      <div className="flex-1 p-6 md:p-10 overflow-y-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {filteredSnippets.length === 0 ? (
-            <div className="col-span-full text-center text-[--text-secondary] py-20 text-sm">
-              No items in this category.
-            </div>
-          ) : (
-            filteredSnippets.map(snippet => (
-              <div key={snippet.id} className="card p-5 flex flex-col gap-4">
-                <div className="text-base font-medium text-[--text-primary]">
-                  {snippet.title}
-                </div>
-                <div className="text-sm text-[--text-secondary] line-clamp-3 font-mono leading-relaxed bg-[rgba(255,255,255,0.02)] p-3 rounded-lg border border-[--border-side]">
-                  {snippet.content}
-                </div>
-                <div className="mt-auto flex items-center justify-between pt-2">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] border border-[--border-side] rounded-full px-2 py-0.5 text-[--text-secondary] uppercase tracking-wider">
-                      {snippet.type === "snippet" ? "Snippet" : "Context"}
+      {/* Apple Notes Category Strip */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-8 no-scrollbar">
+        {NOTE_CATEGORIES.map((cat) => {
+          const active = activeCategory === cat.id
+          return (
+            <button
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.id)}
+              className={`h-[34px] px-4 rounded-full text-[13px] font-medium transition-all whitespace-nowrap ${
+                active
+                  ? "bg-white text-[#111111] font-semibold shadow-[0_1px_8px_rgba(255,255,255,0.15)]"
+                  : "bg-white/[0.04] border border-white/[0.06] text-white/60 hover:text-white hover:bg-white/[0.06]"
+              }`}
+            >
+              {cat.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="h-48 rounded-2xl bg-white/[0.03] animate-pulse" />
+          <div className="h-48 rounded-2xl bg-white/[0.03] animate-pulse" />
+          <div className="h-48 rounded-2xl bg-white/[0.03] animate-pulse" />
+        </div>
+      ) : filteredSnippets.length === 0 ? (
+        /* Apple-Grade Empty State */
+        <div className="card p-14 border border-white/[0.06] bg-[#1A1A1C] text-center max-w-lg mx-auto">
+          <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mx-auto mb-4 text-white/60">
+            <FolderOpen className="w-6 h-6" />
+          </div>
+          <h3 className="text-[20px] font-semibold text-white mb-2">
+            Nothing saved yet.
+          </h3>
+          <p className="text-[14px] text-white/50 mb-6">
+            When you save prompts or system context notes they&apos;ll appear here as visual Apple Notes.
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsDialogOpen(true)}
+            className="inline-flex items-center gap-2 h-[38px] px-5 rounded-xl bg-white text-[#111111] text-[13px] font-semibold hover:bg-white/90 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Save First Prompt</span>
+          </button>
+        </div>
+      ) : (
+        /* Apple Notes Visual Card Grid */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredSnippets.map((item) => {
+            const isCopied = copiedId === item.id
+            return (
+              <div
+                key={item.id}
+                className="card p-6 border border-white/[0.05] bg-[#1A1A1C] hover:bg-white/[0.03] hover:border-white/[0.1] transition-all flex flex-col justify-between group h-[220px]"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <span className="inline-flex items-center h-[22px] px-2.5 rounded-full bg-white/[0.05] border border-white/[0.06] text-[10px] font-mono font-semibold uppercase text-white/70">
+                      {item.type || "Context"}
                     </span>
-                    <span className="text-xs text-[--text-secondary]">
-                      {new Date(snippet.created_at).toLocaleDateString()}
+                    <span className="text-[11px] font-mono text-white/30">
+                      {new Date(item.created_at).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
                     </span>
                   </div>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <button className="p-1.5 rounded-md transition-colors text-[--text-secondary] hover:bg-[--layer-3] hover:text-[--text-primary]">
-                        <Trash2Icon className="w-4 h-4" />
-                      </button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent className="bg-[#111113] border-[--border-side] text-[--text-primary]">
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete this {snippet.type}?</AlertDialogTitle>
-                        <AlertDialogDescription className="text-[--text-secondary]">
-                          This action cannot be undone. This will permanently delete "{snippet.title}" from your library.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel className="bg-[--layer-3] border-[--border-side] text-[--text-primary] hover:bg-[rgba(255,255,255,0.1)]">Cancel</AlertDialogCancel>
-                        <AlertDialogAction 
-                          className="bg-red-500 text-white hover:bg-red-600"
-                          onClick={() => handleDelete(snippet.id)}
-                        >
-                          Yes, delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+
+                  <h3 className="text-[16px] font-semibold text-white truncate mb-2">
+                    {item.title}
+                  </h3>
+
+                  <p className="text-[13px] text-white/60 line-clamp-3 font-mono leading-relaxed">
+                    {item.content}
+                  </p>
+                </div>
+
+                {/* Footer Toolbar */}
+                <div className="pt-4 border-t border-white/[0.05] flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(item.id, item.content)}
+                    className="inline-flex items-center gap-1.5 h-[30px] px-3 rounded-lg bg-white/[0.04] border border-white/[0.06] text-[12px] font-medium text-white/70 hover:text-white hover:bg-white/[0.08] transition-all"
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-[--score-positive]" />
+                        <span className="text-[--score-positive]">Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy Note</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(item.id)}
+                    title="Delete note"
+                    className="p-1.5 rounded-lg text-white/20 hover:text-[--danger] hover:bg-white/[0.04] transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
-            ))
-          )}
+            )
+          })}
         </div>
-      </div>
+      )}
     </div>
   )
 }
