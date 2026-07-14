@@ -374,7 +374,7 @@ export default function HeatmapDemo() {
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <Row label="colorCount">
             <Slider
-              def={{ key: "colorCount", min: 1, max: 10, step: 1, int: true }}
+              def={{ kind: "slider", key: "colorCount", min: 1, max: 10, step: 1, int: true }}
               value={colors.length}
               onChange={(v) => {
                 const n = Math.round(v);

@@ -109,6 +109,9 @@ export function HistoryClient({
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [siteFilter, setSiteFilter] = useState("all")
+  const [strategyFilter, setStrategyFilter] = useState("all")
+  const [dateFilter, setDateFilter] = useState("all")
+  const [sortFilter, setSortFilter] = useState("newest")
   const [selectedLog, setSelectedLog] = useState<any | null>(null)
   const [copied, setCopied] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
@@ -116,27 +119,22 @@ export function HistoryClient({
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchQuery, siteFilter])
+  }, [searchQuery, siteFilter, strategyFilter, dateFilter, sortFilter])
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
-    let query = supabase
+    const { data, error } = await supabase
       .from("optimization_logs")
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(1000)
 
-    if (siteFilter !== "all") {
-      query = query.eq("site", siteFilter)
-    }
-
-    const { data, error } = await query
     if (!error && data) {
       setLogs(data)
     }
     setLoading(false)
-  }, [supabase, userId, siteFilter])
+  }, [supabase, userId])
 
   useEffect(() => {
     fetchLogs()
@@ -177,16 +175,76 @@ export function HistoryClient({
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // Filter by search query
+  // Filter by search query, model, strategy, date, and sorting
   const filteredLogs = useMemo(() => {
-    if (!searchQuery.trim()) return logs
-    const q = searchQuery.toLowerCase()
-    return logs.filter((l) => {
-      const orig = (l.original_prompt || "").toLowerCase()
-      const up = (l.upgraded_prompt || "").toLowerCase()
-      return orig.includes(q) || up.includes(q)
-    })
-  }, [logs, searchQuery])
+    let result = [...logs]
+
+    // 1. Filter by Model (site)
+    if (siteFilter !== "all") {
+      result = result.filter((l) => (l.site || "").toLowerCase() === siteFilter.toLowerCase())
+    }
+
+    // 2. Filter by Strategy
+    if (strategyFilter !== "all") {
+      result = result.filter((l) => {
+        const s = (l.strategy_used || l.strategy || "enhance").toLowerCase()
+        return s === strategyFilter.toLowerCase()
+      })
+    }
+
+    // 3. Filter by Date
+    if (dateFilter !== "all") {
+      const now = new Date()
+      now.setHours(0, 0, 0, 0)
+      result = result.filter((l) => {
+        if (!l.created_at) return true
+        const itemDate = new Date(l.created_at)
+        const itemDay = new Date(itemDate)
+        itemDay.setHours(0, 0, 0, 0)
+
+        if (dateFilter === "today") {
+          return itemDay.getTime() === now.getTime()
+        } else if (dateFilter === "yesterday") {
+          const y = new Date(now)
+          y.setDate(now.getDate() - 1)
+          return itemDay.getTime() === y.getTime()
+        } else if (dateFilter === "7days") {
+          const d7 = new Date(now)
+          d7.setDate(now.getDate() - 7)
+          return itemDate >= d7
+        } else if (dateFilter === "30days") {
+          const d30 = new Date(now)
+          d30.setDate(now.getDate() - 30)
+          return itemDate >= d30
+        }
+        return true
+      })
+    }
+
+    // 4. Filter by Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter((l) => {
+        const orig = (l.original_prompt || "").toLowerCase()
+        const up = (l.upgraded_prompt || "").toLowerCase()
+        const strat = (l.strategy_used || l.strategy || "").toLowerCase()
+        return orig.includes(q) || up.includes(q) || strat.includes(q)
+      })
+    }
+
+    // 5. Sort
+    if (sortFilter === "oldest") {
+      result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    } else if (sortFilter === "highest_delta") {
+      result.sort((a, b) => ((b.score_after || 0) - (b.score_before || 0)) - ((a.score_after || 0) - (a.score_before || 0)))
+    } else if (sortFilter === "lowest_delta") {
+      result.sort((a, b) => ((a.score_after || 0) - (a.score_before || 0)) - ((b.score_after || 0) - (b.score_before || 0)))
+    } else {
+      result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    }
+
+    return result
+  }, [logs, siteFilter, strategyFilter, dateFilter, searchQuery, sortFilter])
 
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / ITEMS_PER_PAGE))
   const paginatedLogs = useMemo(() => {
@@ -256,6 +314,8 @@ export function HistoryClient({
                 { label: "Claude", value: "claude" },
                 { label: "Gemini", value: "gemini" },
                 { label: "Perplexity", value: "perplexity" },
+                { label: "DeepSeek", value: "deepseek" },
+                { label: "Extension", value: "extension" },
               ].map((model) => (
                 <DropdownMenuItem
                   key={model.value}
@@ -268,6 +328,140 @@ export function HistoryClient({
                 >
                   <span>{model.label}</span>
                   {siteFilter === model.value && <Check className="w-3.5 h-3.5 text-white" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Strategy Filter */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="h-[36px] px-3.5 rounded-xl bg-[#1A1A1C] border border-white/[0.08] hover:bg-white/[0.06] hover:border-white/[0.14] text-[13px] font-medium text-white/90 inline-flex items-center gap-2 transition-all shrink-0"
+              >
+                <span>
+                  {strategyFilter === "all"
+                    ? "All Strategies"
+                    : strategyFilter.charAt(0).toUpperCase() + strategyFilter.slice(1)}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-white/40" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-[180px] bg-[#1A1A1C]/95 backdrop-blur-2xl border border-white/[0.1] text-white rounded-xl shadow-2xl p-1.5"
+            >
+              {[
+                { label: "All Strategies", value: "all" },
+                { label: "Enhance", value: "enhance" },
+                { label: "Elaborate", value: "elaborate" },
+                { label: "Concise", value: "concise" },
+              ].map((strat) => (
+                <DropdownMenuItem
+                  key={strat.value}
+                  onClick={() => setStrategyFilter(strat.value)}
+                  className={`flex items-center justify-between rounded-lg px-2.5 py-2 text-[13px] cursor-pointer transition-colors ${
+                    strategyFilter === strat.value
+                      ? "bg-white/[0.12] text-white font-medium"
+                      : "text-white/70 hover:text-white hover:bg-white/[0.06]"
+                  }`}
+                >
+                  <span>{strat.label}</span>
+                  {strategyFilter === strat.value && <Check className="w-3.5 h-3.5 text-white" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Date Filter */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="h-[36px] px-3.5 rounded-xl bg-[#1A1A1C] border border-white/[0.08] hover:bg-white/[0.06] hover:border-white/[0.14] text-[13px] font-medium text-white/90 inline-flex items-center gap-2 transition-all shrink-0"
+              >
+                <span>
+                  {dateFilter === "all"
+                    ? "All Dates"
+                    : dateFilter === "today"
+                    ? "Today"
+                    : dateFilter === "yesterday"
+                    ? "Yesterday"
+                    : dateFilter === "7days"
+                    ? "Last 7 Days"
+                    : "Last 30 Days"}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-white/40" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-[180px] bg-[#1A1A1C]/95 backdrop-blur-2xl border border-white/[0.1] text-white rounded-xl shadow-2xl p-1.5"
+            >
+              {[
+                { label: "All Dates", value: "all" },
+                { label: "Today", value: "today" },
+                { label: "Yesterday", value: "yesterday" },
+                { label: "Last 7 Days", value: "7days" },
+                { label: "Last 30 Days", value: "30days" },
+              ].map((d) => (
+                <DropdownMenuItem
+                  key={d.value}
+                  onClick={() => setDateFilter(d.value)}
+                  className={`flex items-center justify-between rounded-lg px-2.5 py-2 text-[13px] cursor-pointer transition-colors ${
+                    dateFilter === d.value
+                      ? "bg-white/[0.12] text-white font-medium"
+                      : "text-white/70 hover:text-white hover:bg-white/[0.06]"
+                  }`}
+                >
+                  <span>{d.label}</span>
+                  {dateFilter === d.value && <Check className="w-3.5 h-3.5 text-white" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Sort Filter */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="h-[36px] px-3.5 rounded-xl bg-[#1A1A1C] border border-white/[0.08] hover:bg-white/[0.06] hover:border-white/[0.14] text-[13px] font-medium text-white/90 inline-flex items-center gap-2 transition-all shrink-0"
+              >
+                <span>
+                  {sortFilter === "newest"
+                    ? "Newest First"
+                    : sortFilter === "oldest"
+                    ? "Oldest First"
+                    : sortFilter === "highest_delta"
+                    ? "Highest (+Δ)"
+                    : "Lowest Improvement"}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-white/40" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-[200px] bg-[#1A1A1C]/95 backdrop-blur-2xl border border-white/[0.1] text-white rounded-xl shadow-2xl p-1.5"
+            >
+              {[
+                { label: "Newest First", value: "newest" },
+                { label: "Oldest First", value: "oldest" },
+                { label: "Highest Improvement (+Δ)", value: "highest_delta" },
+                { label: "Lowest Improvement", value: "lowest_delta" },
+              ].map((s) => (
+                <DropdownMenuItem
+                  key={s.value}
+                  onClick={() => setSortFilter(s.value)}
+                  className={`flex items-center justify-between rounded-lg px-2.5 py-2 text-[13px] cursor-pointer transition-colors ${
+                    sortFilter === s.value
+                      ? "bg-white/[0.12] text-white font-medium"
+                      : "text-white/70 hover:text-white hover:bg-white/[0.06]"
+                  }`}
+                >
+                  <span>{s.label}</span>
+                  {sortFilter === s.value && <Check className="w-3.5 h-3.5 text-white" />}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -363,21 +557,20 @@ export function HistoryClient({
                       onClick={() => setSelectedLog(log)}
                       className="card p-4 border border-white/[0.05] bg-[#1A1A1C] hover:bg-white/[0.03] hover:border-white/[0.1] transition-all cursor-pointer flex items-center justify-between gap-3 w-full max-w-full overflow-hidden group"
                     >
-                      <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
                         <span className="inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[11px] font-medium text-white/90 shrink-0">
                           <ModelIcon site={log.site} className="w-3.5 h-3.5 text-white/80 shrink-0" />
                           <span>{formatSiteName(log.site)}</span>
+                        </span>
+
+                        <span className="inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-lg bg-white/[0.04] border border-white/[0.07] text-[11px] font-medium text-white/70 capitalize shrink-0">
+                          <span>{log.strategy_used || log.strategy || "Enhance"}</span>
                         </span>
 
                         <div className="min-w-0 flex-1 overflow-hidden">
                           <p className="text-[14px] text-white/90 truncate font-medium">
                             {log.original_prompt || log.upgraded_prompt}
                           </p>
-                          {log.strategy_used && (
-                            <p className="text-[12px] text-white/40 truncate mt-0.5">
-                              Strategy: {log.strategy_used}
-                            </p>
-                          )}
                         </div>
                       </div>
 
@@ -488,12 +681,20 @@ export function HistoryClient({
                 </SheetTitle>
               </SheetHeader>
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-mono text-white/40 uppercase">Model:</span>
-                  <span className="text-[12px] font-mono font-semibold text-white">
-                    {formatSiteName(selectedLog.site)}
-                  </span>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex-wrap gap-2">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-mono text-white/40 uppercase">Model:</span>
+                    <span className="text-[12px] font-mono font-semibold text-white">
+                      {formatSiteName(selectedLog.site)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-mono text-white/40 uppercase">Strategy:</span>
+                    <span className="text-[12px] font-mono font-semibold text-white capitalize">
+                      {selectedLog.strategy_used || selectedLog.strategy || "Enhance"}
+                    </span>
+                  </div>
                 </div>
                 <ScorePill delta={(selectedLog.score_after || 0) - (selectedLog.score_before || 0)} />
               </div>

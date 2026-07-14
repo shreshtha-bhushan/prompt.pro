@@ -101,6 +101,17 @@
   --dur-base:  200ms;
   --dur-slow:  350ms;
   --dur-enter: 400ms;
+
+  /* ── UNIFIED SEMANTIC ACCENT & GREEN FAMILY (#32D74B) ── */
+  --accent-primary: #32D74B;
+  --accent-surface: rgba(50, 215, 75, 0.12);
+  --accent-border:  rgba(50, 215, 75, 0.20);
+  --accent-glow:    rgba(50, 215, 75, 0.18);
+
+  /* ── UNIFIED MOTION TOKENS ─────────────────────────────── */
+  --duration-fast:   160ms;
+  --duration-normal: 200ms;
+  --ease-standard:   cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* ── REDUCED MOTION ───────────────────────────────────────── */

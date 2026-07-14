@@ -28,13 +28,13 @@ export function TopCommandBar() {
         </span>
       </div>
 
-      {/* Center: Search Command Bar */}
-      <div className="flex-1 max-w-[440px] mx-6">
+      {/* Center: Search Command Bar (Increased width by ~20% for prominent command surface) */}
+      <div className="flex-1 max-w-[540px] mx-6">
         <div
-          className={`relative flex items-center h-[34px] w-full rounded-xl border transition-all duration-200 px-3 ${
+          className={`relative flex items-center h-[34px] w-full rounded-xl border transition-all duration-[160ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] px-3.5 ${
             searchFocused
-              ? "bg-white/[0.07] border-white/20 shadow-[0_0_0_3px_rgba(255,255,255,0.06)]"
-              : "bg-white/[0.03] border-white/[0.07] hover:bg-white/[0.05] hover:border-white/[0.1]"
+              ? "bg-white/[0.07] border-[#32D74B]/30 shadow-[0_0_0_3px_rgba(50,215,75,0.12)]"
+              : "bg-white/[0.03] border-white/[0.07] hover:bg-white/[0.05] hover:border-white/[0.12]"
           }`}
         >
           <Search className="w-3.5 h-3.5 text-white/40 mr-2.5 shrink-0" />
