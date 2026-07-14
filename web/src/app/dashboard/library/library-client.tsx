@@ -34,11 +34,30 @@ import {
 
 const NOTE_CATEGORIES = [
   { id: "all", label: "All Notes" },
-  { id: "brand", label: "Brand Voice" },
-  { id: "research", label: "Research Context" },
-  { id: "tech", label: "Next.js & Stack" },
-  { id: "general", label: "General Templates" },
+  { id: "snippet", label: "Snippets" },
+  { id: "context", label: "Context Blocks" },
 ]
+
+function isContextNote(item: any) {
+  if (item?.type === "context") return true
+  if (item?.type === "snippet") return false
+  if (
+    item?.type === "brand" ||
+    item?.type === "research" ||
+    item?.type === "tech"
+  )
+    return true
+  const title = (item?.title || "").toLowerCase()
+  if (
+    title.includes("stack") ||
+    title.includes("tone") ||
+    title.includes("claude") ||
+    title.includes("context")
+  ) {
+    return true
+  }
+  return false
+}
 
 export function LibraryClient({
   userId,
@@ -61,7 +80,7 @@ export function LibraryClient({
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [newTitle, setNewTitle] = useState("")
   const [newContent, setNewContent] = useState("")
-  const [newCategory, setNewCategory] = useState("brand")
+  const [newCategory, setNewCategory] = useState("snippet")
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const fetchSnippets = useCallback(async () => {
@@ -72,8 +91,43 @@ export function LibraryClient({
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
 
-    if (data) {
+    if (data && data.length > 0) {
       setSnippets(data)
+    } else {
+      setSnippets([
+        {
+          id: "s1",
+          title: "Example: Senior Review",
+          content: "Review this code for edge cases and efficiency. Ensure it follows modern standards.",
+          type: "snippet",
+          created_at: "2026-06-10T10:00:00Z",
+          active: true,
+        },
+        {
+          id: "c1",
+          title: "React Stack",
+          content: "Using React 18, Tailwind, TypeScript.",
+          type: "context",
+          created_at: "2026-06-10T10:00:00Z",
+          active: true,
+        },
+        {
+          id: "c2",
+          title: "Brand Tone",
+          content: "Brand voice is extremely energetic and concise.",
+          type: "context",
+          created_at: "2026-06-10T10:00:00Z",
+          active: true,
+        },
+        {
+          id: "c3",
+          title: "Claude Code",
+          content: "Always Check for edge cases, and apply guardrails appropriately.",
+          type: "context",
+          created_at: "2026-06-10T10:00:00Z",
+          active: true,
+        },
+      ])
     }
     setLoading(false)
   }, [supabase, userId])
@@ -135,11 +189,31 @@ export function LibraryClient({
     setTimeout(() => setCopiedId(null), 2000)
   }
 
-  // Filter snippets
+  const handleToggleActive = async (item: any) => {
+    const currentActive = item.active !== false
+    const newActive = !currentActive
+
+    setSnippets((prev) =>
+      prev.map((s) => (s.id === item.id ? { ...s, active: newActive } : s))
+    )
+
+    try {
+      await supabase
+        .from("snippets")
+        .update({ active: newActive })
+        .eq("id", item.id)
+        .eq("user_id", userId)
+    } catch (e) {}
+  }
+
+  // Filter snippets vs context blocks
   const filteredSnippets = useMemo(() => {
     return snippets.filter((s) => {
+      const isCtx = isContextNote(s)
       const matchesCat =
-        activeCategory === "all" || s.type === activeCategory
+        activeCategory === "all" ||
+        (activeCategory === "context" && isCtx) ||
+        (activeCategory === "snippet" && !isCtx)
       const matchesSearch =
         !searchQuery.trim() ||
         (s.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -235,10 +309,8 @@ export function LibraryClient({
                     onChange={(e) => setNewCategory(e.target.value)}
                     className="w-full h-[38px] px-3 rounded-xl bg-[#151515] border border-white/[0.08] text-[13px] text-white focus:outline-none"
                   >
-                    <option value="brand">Brand Voice</option>
-                    <option value="research">Research Context</option>
-                    <option value="tech">Next.js &amp; Tech Stack</option>
-                    <option value="general">General Templates</option>
+                    <option value="snippet">Prompt Snippet</option>
+                    <option value="context">Context Block</option>
                   </select>
                 </div>
 
@@ -343,22 +415,50 @@ export function LibraryClient({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredSnippets.map((item) => {
             const isCopied = copiedId === item.id
+            const isCtx = isContextNote(item)
+            const isActive = item.active !== false
             return (
               <div
                 key={item.id}
-                className="card p-6 border border-white/[0.05] bg-[#1A1A1C] hover:bg-white/[0.03] hover:border-white/[0.1] transition-all flex flex-col justify-between group h-[220px]"
+                className={`card p-6 border transition-all flex flex-col justify-between group h-[225px] ${
+                  isCtx && isActive
+                    ? "border-[#30d158]/35 bg-gradient-to-br from-[#30d158]/[0.06] to-[#1A1A1C] shadow-[0_4px_24px_rgba(48,209,88,0.06)]"
+                    : "border-white/[0.06] bg-[#1A1A1C] hover:bg-white/[0.03] hover:border-white/[0.12]"
+                }`}
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className="inline-flex items-center h-[22px] px-2.5 rounded-full bg-white/[0.05] border border-white/[0.06] text-[10px] font-mono font-semibold uppercase text-white/70">
-                      {item.type || "Context"}
+                    <span
+                      className={`inline-flex items-center h-[22px] px-2.5 rounded-full text-[10px] font-mono font-semibold uppercase ${
+                        isCtx
+                          ? "bg-[#30d158]/15 border border-[#30d158]/30 text-[#30d158]"
+                          : "bg-white/[0.05] border border-white/[0.06] text-white/70"
+                      }`}
+                    >
+                      {isCtx ? "CONTEXT BLOCK" : "SNIPPET"}
                     </span>
-                    <span className="text-[11px] font-mono text-white/30">
-                      {new Date(item.created_at).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </span>
+
+                    {isCtx ? (
+                      <span
+                        className={`text-[11px] font-mono font-medium flex items-center gap-1.5 ${
+                          isActive ? "text-[#30d158]" : "text-white/40"
+                        }`}
+                      >
+                        {isActive && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#30d158] animate-pulse" />
+                        )}
+                        {isActive ? "Active" : "Disabled"}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-mono text-white/30">
+                        {new Date(
+                          item.created_at || Date.now()
+                        ).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                    )}
                   </div>
 
                   <h3 className="text-[16px] font-semibold text-white truncate mb-2">
@@ -371,30 +471,46 @@ export function LibraryClient({
                 </div>
 
                 {/* Footer Toolbar */}
-                <div className="pt-4 border-t border-white/[0.05] flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(item.id, item.content)}
-                    className="inline-flex items-center gap-1.5 h-[30px] px-3 rounded-lg bg-white/[0.04] border border-white/[0.06] text-[12px] font-medium text-white/70 hover:text-white hover:bg-white/[0.08] transition-all"
-                  >
-                    {isCopied ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-[--score-positive]" />
-                        <span className="text-[--score-positive]">Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy Note</span>
-                      </>
+                <div className="pt-4 border-t border-white/[0.06] flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {isCtx && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleActive(item)}
+                        className={`h-[30px] px-3 rounded-lg text-[12px] font-semibold transition-all ${
+                          isActive
+                            ? "bg-[#30d158]/15 border border-[#30d158]/35 text-[#30d158] hover:bg-[#30d158]/25"
+                            : "bg-white/[0.05] border border-white/[0.08] text-white/70 hover:text-white hover:bg-white/[0.1]"
+                        }`}
+                      >
+                        {isActive ? "Enabled" : "Enable"}
+                      </button>
                     )}
-                  </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(item.id, item.content)}
+                      className="inline-flex items-center gap-1.5 h-[30px] px-3 rounded-lg bg-white/[0.04] border border-white/[0.06] text-[12px] font-medium text-white/70 hover:text-white hover:bg-white/[0.08] transition-all"
+                    >
+                      {isCopied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-[#30d158]" />
+                          <span className="text-[#30d158]">Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy Note</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
 
                   <button
                     type="button"
                     onClick={() => handleDelete(item.id)}
                     title="Delete note"
-                    className="p-1.5 rounded-lg text-white/20 hover:text-[--danger] hover:bg-white/[0.04] transition-colors"
+                    className="p-1.5 rounded-lg text-white/20 hover:text-[--danger] hover:bg-white/[0.04] transition-colors shrink-0"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

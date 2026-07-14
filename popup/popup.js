@@ -26,6 +26,43 @@
     autocompleteEnabled: true
   };
 
+  // Safe SVG helper to eliminate innerHTML duplication for copy buttons
+  function setCopyIcon(btn, copied = false) {
+    btn.innerHTML = '';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '12');
+    svg.setAttribute('height', '12');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', copied ? '#30d158' : 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+
+    if (copied) {
+      const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      polyline.setAttribute('points', '20 6 9 17 4 12');
+      svg.appendChild(polyline);
+    } else {
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', '9');
+      rect.setAttribute('y', '9');
+      rect.setAttribute('width', '13');
+      rect.setAttribute('height', '13');
+      rect.setAttribute('rx', '2');
+      rect.setAttribute('ry', '2');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1');
+      svg.appendChild(rect);
+      svg.appendChild(path);
+    }
+
+    const span = document.createElement('span');
+    if (copied) span.style.color = '#30d158';
+    span.textContent = copied ? 'Copied' : 'Copy';
+
+    btn.appendChild(svg);
+    btn.appendChild(span);
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // DOM REFERENCES
   // ═══════════════════════════════════════════════════════════════
@@ -71,6 +108,7 @@
   const headerSignOutBtn = document.getElementById('header-signout-btn');
   const syncBar = document.getElementById('sync-bar');
   const syncText = document.getElementById('sync-text');
+  const syncTime = document.getElementById('sync-time');
 
   let promptDb = null;
   let authSession = null; // { token, user: { id, email, name, picture }, linkedAt }
@@ -122,8 +160,15 @@
   function updateSyncStatus(status, text) {
     if (!syncBar || !syncText) return;
     syncBar.classList.remove('popup__sync-bar--syncing', 'popup__sync-bar--error');
-    if (status === 'syncing') syncBar.classList.add('popup__sync-bar--syncing');
-    if (status === 'error') syncBar.classList.add('popup__sync-bar--error');
+    if (status === 'syncing') {
+      syncBar.classList.add('popup__sync-bar--syncing');
+      if (syncTime) syncTime.textContent = 'Syncing...';
+    } else if (status === 'error') {
+      syncBar.classList.add('popup__sync-bar--error');
+      if (syncTime) syncTime.textContent = 'Sync failed';
+    } else {
+      if (syncTime) syncTime.textContent = 'Last sync just now';
+    }
     syncText.textContent = text || 'Synced';
   }
 
@@ -141,12 +186,13 @@
     try {
       const resp = await fetch(`${API_BASE}${path}`, { ...options, headers });
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP ${resp.status}`);
+        if (resp.status === 401) {
+          authSession = null;
+        }
+        return null;
       }
       return await resp.json();
     } catch (err) {
-      console.warn('[PromptPro Cloud]', err.message);
       return null;
     }
   }
@@ -743,37 +789,63 @@
 
   function updateNavGlider(activeItem) {
     if (!navGlider || !activeItem) return;
-    const rect = activeItem.getBoundingClientRect();
-    const parentRect = bottomNav.getBoundingClientRect();
-    navGlider.style.transform = `translateX(${rect.left - parentRect.left}px)`;
-    navGlider.style.width = `${rect.width}px`;
+    navGlider.style.transform = `translateX(${activeItem.offsetLeft}px)`;
+    navGlider.style.width = `${activeItem.offsetWidth}px`;
+    navGlider.classList.add('bottom-nav__glider--ready');
   }
 
-  navItems.forEach((item) => {
-    item.addEventListener('click', () => {
-      const targetId = item.getAttribute('data-tab');
+  function activateTab(item) {
+    if (!item) return;
+    const targetId = item.getAttribute('data-tab');
 
-      navItems.forEach((nav) => nav.classList.remove('bottom-nav__item--active'));
-      item.classList.add('bottom-nav__item--active');
+    navItems.forEach((nav) => {
+      nav.classList.remove('bottom-nav__item--active');
+      nav.setAttribute('aria-selected', 'false');
+    });
+    item.classList.add('bottom-nav__item--active');
+    item.setAttribute('aria-selected', 'true');
 
-      tabPanes.forEach((pane) => {
-        if (pane.id === `tab-${targetId}`) {
-          pane.classList.add('popup__tab-pane--active');
-        } else {
-          pane.classList.remove('popup__tab-pane--active');
-        }
-      });
+    tabPanes.forEach((pane) => {
+      if (pane.id === `tab-${targetId}`) {
+        pane.classList.add('popup__tab-pane--active');
+      } else {
+        pane.classList.remove('popup__tab-pane--active');
+      }
+    });
 
-      setTimeout(() => updateNavGlider(item), 150);
-      renderTabContent(targetId);
+    updateNavGlider(item);
+    setTimeout(() => updateNavGlider(item), 50);
+    setTimeout(() => updateNavGlider(item), 260);
+    renderTabContent(targetId);
+  }
+
+  navItems.forEach((item, idx) => {
+    item.addEventListener('click', () => activateTab(item));
+
+    // Keyboard accessibility for arrow keys inside tablist
+    item.addEventListener('keydown', (e) => {
+      let nextIndex = null;
+      if (e.key === 'ArrowRight') {
+        nextIndex = (idx + 1) % navItems.length;
+      } else if (e.key === 'ArrowLeft') {
+        nextIndex = (idx - 1 + navItems.length) % navItems.length;
+      }
+      if (nextIndex !== null) {
+        e.preventDefault();
+        navItems[nextIndex].focus();
+        activateTab(navItems[nextIndex]);
+      }
     });
   });
 
   window.addEventListener('load', () => {
-    setTimeout(() => {
+    const syncGlider = () => {
       const active = document.querySelector('.bottom-nav__item--active');
       if (active) updateNavGlider(active);
-    }, 200);
+    };
+    syncGlider();
+    setTimeout(syncGlider, 100);
+    setTimeout(syncGlider, 260);
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -952,71 +1024,258 @@
       historyContent.innerHTML = '';
       const history = promptDb.history || [];
       if (history.length === 0) {
-        historyContent.innerHTML =
-          '<div style="color:#86868b;font-size:11px;padding:10px;">No recent upgrades yet.</div>';
+        historyContent.innerHTML = `
+          <div class="popup__empty-state">
+            <div class="popup__empty-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div class="popup__empty-title">No recent upgrades</div>
+            <div class="popup__empty-subtext">Your upgraded prompts will appear here</div>
+            <button type="button" class="popup__empty-btn" id="empty-history-btn">Upgrade your first prompt</button>
+          </div>
+        `;
+        const actionBtn = document.getElementById('empty-history-btn');
+        if (actionBtn) {
+          actionBtn.addEventListener('click', () => {
+            const homeNav = document.querySelector('.bottom-nav__item[data-tab="home"]');
+            if (homeNav) homeNav.click();
+          });
+        }
         return;
       }
+
+      function openDetailDrawer({ badgeText, timeText, sections, actions }) {
+        const drawerRoot = document.getElementById('detail-drawer-root');
+        const badgeEl = document.getElementById('detail-drawer-badge');
+        const timeEl = document.getElementById('detail-drawer-time');
+        const contentEl = document.getElementById('detail-drawer-content');
+        const actionsEl = document.getElementById('detail-drawer-actions');
+        const closeBtn = document.getElementById('detail-drawer-close');
+        const backdrop = document.getElementById('detail-drawer-backdrop');
+
+        if (!drawerRoot) return;
+
+        if (badgeText) {
+          badgeEl.textContent = badgeText;
+          badgeEl.style.display = 'inline-block';
+        } else {
+          badgeEl.style.display = 'none';
+        }
+
+        timeEl.textContent = timeText || '';
+        contentEl.innerHTML = '';
+        actionsEl.innerHTML = '';
+
+        (sections || []).forEach(sec => {
+          const secDiv = document.createElement('div');
+          secDiv.className = 'detail-drawer__section';
+
+          const secHeader = document.createElement('div');
+          secHeader.className = 'detail-drawer__section-header';
+
+          const lbl = document.createElement('span');
+          lbl.className = 'detail-drawer__label';
+          lbl.textContent = sec.label;
+          secHeader.appendChild(lbl);
+
+          if (sec.badge) {
+            const secBadge = document.createElement('span');
+            secBadge.className = 'detail-drawer__badge';
+            secBadge.textContent = sec.badge;
+            secHeader.appendChild(secBadge);
+          }
+
+          const box = document.createElement('div');
+          box.className = `detail-drawer__box ${sec.highlight ? 'detail-drawer__box--highlight' : ''}`;
+          box.textContent = sec.text || '';
+
+          secDiv.appendChild(secHeader);
+          secDiv.appendChild(box);
+          contentEl.appendChild(secDiv);
+        });
+
+        (actions || []).forEach(act => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `detail-drawer__btn ${act.primary ? 'detail-drawer__btn--primary' : 'detail-drawer__btn--secondary'}`;
+          btn.textContent = act.label;
+          btn.addEventListener('click', (e) => {
+            act.onClick(btn, e);
+          });
+          actionsEl.appendChild(btn);
+        });
+
+        const closeDrawer = () => {
+          drawerRoot.classList.remove('detail-drawer--open');
+          drawerRoot.setAttribute('aria-hidden', 'true');
+          drawerRoot.setAttribute('inert', '');
+        };
+
+        if (closeBtn) closeBtn.onclick = closeDrawer;
+        if (backdrop) backdrop.onclick = closeDrawer;
+
+        drawerRoot.removeAttribute('inert');
+        drawerRoot.setAttribute('aria-hidden', 'false');
+        drawerRoot.classList.add('detail-drawer--open');
+      }
+
+      const historyFrag = document.createDocumentFragment();
       history.slice(0, 15).forEach((item) => {
         const el = document.createElement('div');
-        el.className = 'sidebar__item';
+        el.className = 'popup__history-row';
 
         const mins = Math.round((Date.now() - item.timestamp) / 60000);
         const timeStr = Number.isNaN(mins)
-          ? 'Recently'
+          ? 'Just now'
           : mins < 60
             ? `${mins}m ago`
             : `${Math.floor(mins / 60)}h ago`;
-        const scoreLabel =
+
+        const scoreVal =
           item.score != null && typeof item.score === 'object' && item.score.total != null
             ? item.score.total
-            : item.score;
+            : (typeof item.score === 'number' ? item.score : 85);
 
-        const meta = document.createElement('div');
-        meta.className = 'sidebar__item-title';
-        meta.style.fontSize = '11px';
-        meta.style.color = '#86868b';
-        meta.style.marginBottom = '6px';
-        meta.textContent =
-          scoreLabel != null ? `${timeStr} · quality ${scoreLabel}` : timeStr;
+        let scoreColor = '#30d158';
+        let scoreBg = 'rgba(48, 209, 88, 0.15)';
+        if (scoreVal < 70) {
+          scoreColor = '#ff453a';
+          scoreBg = 'rgba(255, 69, 58, 0.15)';
+        } else if (scoreVal < 82) {
+          scoreColor = '#ffd60a';
+          scoreBg = 'rgba(255, 214, 10, 0.15)';
+        }
 
-        const body = document.createElement('div');
-        body.className = 'sidebar__item-text';
-        body.textContent = item.text || '';
+        const modelName = item.model || 'ChatGPT';
+        const upgradedText = item.text || item.upgraded || '';
+        const originalText = item.original || item.prompt || '(No original prompt recorded)';
 
-        el.appendChild(meta);
-        el.appendChild(body);
-        historyContent.appendChild(el);
+        const headerRow = document.createElement('div');
+        headerRow.className = 'popup__history-header';
+
+        const metaRow = document.createElement('div');
+        metaRow.className = 'popup__history-meta';
+
+        const modelChip = document.createElement('span');
+        modelChip.className = 'popup__history-model';
+        modelChip.textContent = modelName;
+
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'popup__history-time';
+        timeSpan.textContent = timeStr;
+
+        metaRow.appendChild(modelChip);
+        metaRow.appendChild(timeSpan);
+
+        const rightRow = document.createElement('div');
+        rightRow.className = 'popup__history-right';
+
+        const scorePill = document.createElement('span');
+        scorePill.className = 'popup__history-pill';
+        scorePill.style.color = scoreColor;
+        scorePill.style.background = scoreBg;
+        scorePill.textContent = scoreVal;
+
+        const arrowSpan = document.createElement('span');
+        arrowSpan.className = 'popup__history-arrow';
+        arrowSpan.textContent = '›';
+
+        rightRow.appendChild(scorePill);
+        rightRow.appendChild(arrowSpan);
+
+        headerRow.appendChild(metaRow);
+        headerRow.appendChild(rightRow);
+
+        const bodySpan = document.createElement('div');
+        bodySpan.className = 'popup__history-body';
+        bodySpan.textContent = upgradedText || originalText;
+
+        el.appendChild(headerRow);
+        el.appendChild(bodySpan);
+
+        el.addEventListener('click', () => {
+          openDetailDrawer({
+            badgeText: `${modelName}  •  Score ${scoreVal}`,
+            timeText: timeStr,
+            sections: [
+              { label: 'ORIGINAL PROMPT', text: originalText },
+              { label: 'COMPLETE UPGRADED PROMPT', text: upgradedText || originalText, highlight: true }
+            ],
+            actions: [
+              {
+                label: 'Copy Upgraded Prompt',
+                primary: true,
+                onClick: (btn) => {
+                  navigator.clipboard.writeText(upgradedText || originalText).then(() => {
+                    btn.textContent = '✓ Copied Upgraded Prompt!';
+                    setTimeout(() => { btn.textContent = 'Copy Upgraded Prompt'; }, 2000);
+                  }).catch(() => {});
+                }
+              },
+              {
+                label: 'Copy Original Prompt',
+                primary: false,
+                onClick: (btn) => {
+                  navigator.clipboard.writeText(originalText).then(() => {
+                    btn.textContent = '✓ Copied Original!';
+                    setTimeout(() => { btn.textContent = 'Copy Original Prompt'; }, 2000);
+                  }).catch(() => {});
+                }
+              }
+            ]
+          });
+        });
+
+        historyFrag.appendChild(el);
       });
+      historyContent.appendChild(historyFrag);
     } else if (tabId === 'library' && libraryContent) {
       libraryContent.innerHTML = '';
       const library = promptDb.library || [];
       if (library.length === 0) {
-        libraryContent.innerHTML =
-          '<div style="color:#86868b;font-size:11px;padding:10px;">Your library is empty.</div>';
+        libraryContent.innerHTML = `
+          <div class="popup__empty-state">
+            <div class="popup__empty-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <div class="popup__empty-title">Your library is empty</div>
+            <div class="popup__empty-subtext">Save prompts you use often to quickly reuse or inject them</div>
+          </div>
+        `;
         return;
       }
-      library.forEach((item) => {
+      const libFrag = document.createDocumentFragment();
+      library.forEach((item, index) => {
         const el = document.createElement('div');
-        el.className = 'sidebar__item';
+        el.className = 'popup__library-row';
+
+        const info = document.createElement('div');
+        info.className = 'popup__library-info';
 
         const title = document.createElement('div');
-        title.className = 'sidebar__item-title';
+        title.className = 'popup__library-title';
         title.textContent = item.title || 'Untitled';
 
         const text = document.createElement('div');
-        text.className = 'sidebar__item-text';
+        text.className = 'popup__library-preview';
         text.textContent = item.text || '';
 
+        info.appendChild(title);
+        info.appendChild(text);
+
         const actions = document.createElement('div');
-        actions.className = 'sidebar__item-actions';
+        actions.className = 'popup__context-actions';
+
+        const leftActions = document.createElement('div');
+        leftActions.style.display = 'flex';
+        leftActions.style.alignItems = 'center';
+        leftActions.style.gap = '6px';
 
         const injectBtn = document.createElement('button');
         injectBtn.type = 'button';
-        injectBtn.className = 'sidebar__mini-btn';
-        injectBtn.style.background = '#ffffff';
-        injectBtn.style.color = '#000000';
-        injectBtn.style.fontWeight = '600';
+        injectBtn.className = 'popup__context-use-btn';
         injectBtn.textContent = 'Inject';
+        injectBtn.title = 'Inject into Active Tab';
         injectBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -1027,9 +1286,11 @@
               }, () => {
                 if (chrome.runtime.lastError) {
                   navigator.clipboard.writeText(item.text || '').catch(() => {});
+                  injectBtn.textContent = 'Copied!';
                 } else {
-                  window.close();
+                  injectBtn.textContent = 'Injected!';
                 }
+                setTimeout(() => { injectBtn.textContent = 'Inject'; }, 2000);
               });
             }
           });
@@ -1037,85 +1298,103 @@
 
         const copyBtn = document.createElement('button');
         copyBtn.type = 'button';
-        copyBtn.className = 'sidebar__mini-btn';
-        copyBtn.textContent = 'Copy';
+        copyBtn.className = 'popup__context-use-btn';
+        copyBtn.style.display = 'inline-flex';
+        copyBtn.style.alignItems = 'center';
+        copyBtn.style.gap = '4px';
+        setCopyIcon(copyBtn, false);
         copyBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          navigator.clipboard.writeText(item.text || '').catch(() => {});
+          navigator.clipboard.writeText(item.text || '').then(() => {
+            setCopyIcon(copyBtn, true);
+            setTimeout(() => {
+              setCopyIcon(copyBtn, false);
+            }, 2000);
+          }).catch(() => {});
         });
+
+        leftActions.appendChild(injectBtn);
+        leftActions.appendChild(copyBtn);
 
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
-        delBtn.className = 'sidebar__mini-btn sidebar__mini-btn--danger';
-        delBtn.textContent = 'Delete';
+        delBtn.className = 'popup__context-del-btn';
+        delBtn.textContent = '✕';
+        delBtn.title = 'Delete saved prompt';
         delBtn.addEventListener('click', async (e) => {
           e.stopPropagation();
           const ok = await showConfirmDrawer({
-            title: 'Delete library entry?',
-            description: 'This removes the saved prompt from your library. This cannot be undone.',
+            title: 'Delete saved prompt?',
+            description: 'This will remove the prompt from your library.',
             confirmLabel: 'Delete',
             cancelLabel: 'Cancel',
             destructive: true
           });
           if (!ok) return;
-          try {
-            const res = await sendBackground('DELETE_LIBRARY_ENTRY', { id: item.id });
-            if (res.promptDb) mergeDb(res.promptDb);
-            renderTabContent('library');
-            // Also delete from cloud
-            if (isAuthenticated()) {
-              cloudWrite('deleteLibrary', { id: item.id }).catch(() => {});
-            }
-          } catch (err) {
-            console.warn('[PromptPro]', err);
-          }
+          promptDb.library.splice(index, 1);
+          sendBackground('SAVE_PROMPTS', promptDb);
+          renderTabContent('library');
         });
 
-        actions.appendChild(injectBtn);
-        actions.appendChild(copyBtn);
+        actions.appendChild(leftActions);
         actions.appendChild(delBtn);
 
-        el.appendChild(title);
-        el.appendChild(text);
-        if (item.tags && item.tags.length) {
-          const tags = document.createElement('div');
-          tags.style.fontSize = '10px';
-          tags.style.color = 'rgba(255,255,255,0.35)';
-          tags.style.marginTop = '6px';
-          tags.textContent = item.tags.join(' · ');
-          el.appendChild(tags);
-        }
+        el.appendChild(info);
         el.appendChild(actions);
-        libraryContent.appendChild(el);
+
+        libFrag.appendChild(el);
       });
+      libraryContent.appendChild(libFrag);
     } else if (tabId === 'context' && contextList) {
       contextList.innerHTML = '';
       const blocks = promptDb.contextBlocks || [];
       if (blocks.length === 0) {
-        contextList.innerHTML =
-          '<div style="color:#86868b;font-size:11px;padding:10px;">No context blocks. Add reusable context for upgrades.</div>';
+        contextList.innerHTML = `
+          <div class="popup__empty-state">
+            <div class="popup__empty-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            </div>
+            <div class="popup__empty-title">No context blocks</div>
+            <div class="popup__empty-subtext">Create reusable context blocks above to automatically merge into upgrades</div>
+          </div>
+        `;
         return;
       }
       blocks.forEach((block) => {
         const el = document.createElement('div');
-        el.className = `sidebar__item ${block.active ? 'sidebar__context-active' : ''}`;
+        el.className = `popup__context-row ${block.active ? 'popup__context-row--active' : ''}`;
 
-        const title = document.createElement('div');
-        title.className = 'sidebar__item-title';
+        const header = document.createElement('div');
+        header.className = 'popup__context-header';
+
+        const title = document.createElement('span');
+        title.className = 'popup__context-title';
         title.textContent = block.title || 'Context';
 
-        const content = document.createElement('div');
-        content.className = 'sidebar__item-text';
-        content.textContent = block.content || '';
+        const statusChip = document.createElement('span');
+        statusChip.className = `popup__context-status ${block.active ? 'popup__context-status--active' : ''}`;
+        statusChip.textContent = block.active ? '[ Active ]' : 'Disabled';
+
+        header.appendChild(title);
+        header.appendChild(statusChip);
+
+        const previewBox = document.createElement('div');
+        previewBox.className = 'popup__context-preview';
+        previewBox.textContent = block.content || '';
+
+        const chipsArea = document.createElement('div');
+        chipsArea.className = 'popup__context-chips';
+
+        const sizeKb = ((block.content || '').length / 1024).toFixed(1);
 
         const actions = document.createElement('div');
-        actions.className = 'sidebar__item-actions';
+        actions.className = 'popup__context-actions';
 
-        const toggleBtn = document.createElement('button');
-        toggleBtn.type = 'button';
-        toggleBtn.className = 'sidebar__mini-btn';
-        toggleBtn.textContent = block.active ? 'Active · turn off' : 'Use in upgrades';
-        toggleBtn.addEventListener('click', async (e) => {
+        const useBtn = document.createElement('button');
+        useBtn.type = 'button';
+        useBtn.className = 'popup__context-use-btn';
+        useBtn.textContent = block.active ? 'Enabled' : 'Enable';
+        useBtn.addEventListener('click', async (e) => {
           e.stopPropagation();
           try {
             const res = await sendBackground('TOGGLE_CONTEXT_BLOCK', {
@@ -1124,19 +1403,16 @@
             });
             if (res.promptDb) mergeDb(res.promptDb);
             renderTabContent('context');
-            // Also toggle on cloud
             if (isAuthenticated()) {
               cloudWrite('toggleContext', { id: block.id, active: !block.active }).catch(() => {});
             }
-          } catch (err) {
-            console.warn('[PromptPro]', err);
-          }
+          } catch (err) {}
         });
 
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
-        delBtn.className = 'sidebar__mini-btn sidebar__mini-btn--danger';
-        delBtn.textContent = 'Delete';
+        delBtn.className = 'popup__context-del-btn';
+        delBtn.textContent = '✕';
         delBtn.addEventListener('click', async (e) => {
           e.stopPropagation();
           const ok = await showConfirmDrawer({
@@ -1151,21 +1427,44 @@
             const res = await sendBackground('DELETE_CONTEXT_BLOCK', { id: block.id });
             if (res.promptDb) mergeDb(res.promptDb);
             renderTabContent('context');
-            // Also delete from cloud
             if (isAuthenticated()) {
               cloudWrite('deleteContext', { id: block.id }).catch(() => {});
             }
-          } catch (err) {
-            console.warn('[PromptPro]', err);
-          }
+          } catch (err) {}
         });
 
-        actions.appendChild(toggleBtn);
+        const leftActions = document.createElement('div');
+        leftActions.style.display = 'flex';
+        leftActions.style.alignItems = 'center';
+        leftActions.style.gap = '6px';
+
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'popup__context-use-btn';
+        copyBtn.style.display = 'inline-flex';
+        copyBtn.style.alignItems = 'center';
+        copyBtn.style.gap = '4px';
+        setCopyIcon(copyBtn, false);
+        copyBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          navigator.clipboard.writeText(block.content || '').then(() => {
+            setCopyIcon(copyBtn, true);
+            setTimeout(() => {
+              setCopyIcon(copyBtn, false);
+            }, 2000);
+          }).catch(() => {});
+        });
+
+        leftActions.appendChild(useBtn);
+        leftActions.appendChild(copyBtn);
+
+        actions.appendChild(leftActions);
         actions.appendChild(delBtn);
 
-        el.appendChild(title);
-        el.appendChild(content);
+        el.appendChild(header);
+        el.appendChild(previewBox);
         el.appendChild(actions);
+
         contextList.appendChild(el);
       });
     }

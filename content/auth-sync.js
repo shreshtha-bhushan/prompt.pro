@@ -13,16 +13,12 @@ window.addEventListener("message", (event) => {
         type: "SYNC_CLERK_TOKEN",
         payload: event.data.payload
       }, (response) => {
-        if (chrome.runtime.lastError) {
-          // Extension might be reloaded or context invalidated
-          console.warn("[PromptPro] Extension context invalid or background script not ready.");
-        } else if (response && response.success) {
+        const _err = chrome.runtime.lastError;
+        if (response && response.success) {
           console.log("[PromptPro] Successfully synced auth token to extension.");
         }
       });
-    } catch (err) {
-      console.warn("[PromptPro AuthSync] Could not send message to extension background.", err);
-    }
+    } catch (err) {}
   }
 
   if (event.data && event.data.type === "PROMPT_PRO_SYNC_SIGNOUT") {

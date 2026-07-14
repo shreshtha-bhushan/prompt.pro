@@ -1,3 +1,5 @@
+"use client";
+
 export { Heatmap, heatmapPresets } from "@paper-design/shaders-react";
 export type { HeatmapProps } from "@paper-design/shaders-react";
 
