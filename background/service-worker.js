@@ -6,9 +6,109 @@
  * - 6 tone presets (professional, casual, academic, creative, technical, direct)
  * - Multi-dimensional scoring (clarity, specificity, structure, intent)
  * 
- * ZERO network calls. ZERO external dependencies. ZERO telemetry.
- * All processing is pure string operations — target < 150ms.
+ * ZERO network calls for local optimization. ZERO external dependencies.
+ * PostHog analytics uses the lightweight HTTP transport in analytics.js.
  */
+
+// ── Analytics (MV3-safe lightweight PostHog HTTP transport) ─────────────────
+// Inline the analytics module functions to avoid importScripts() CSP issues.
+// Each service worker context initializes its own analytics instance.
+
+const _POSTHOG_KEY_SW = 'phc_q3ax276fidL5wqRAE3ub48D2b7iSdVLVNeDLcY3TgATR';
+const _POSTHOG_HOST_SW = 'https://prompt-pro-liart.vercel.app/ingest';
+const _SW_VERSION = chrome.runtime.getManifest().version;
+
+let _sw_distinctId = null;
+let _sw_anonId = null;
+let _sw_optedOut = false;
+let _sw_analyticsInit = false;
+
+function _swUuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+function _swStripContent(props) {
+  if (!props || typeof props !== 'object') return {};
+  const safe = {};
+  for (const [k, v] of Object.entries(props)) {
+    if (typeof v === 'string' && v.length > 200) continue;
+    safe[k] = v;
+  }
+  return safe;
+}
+
+async function _swSend(eventName, properties) {
+  if (!_POSTHOG_KEY_SW || _POSTHOG_KEY_SW === 'phc_placeholder' || _sw_optedOut) return;
+  const distinctId = _sw_distinctId || _sw_anonId || 'anonymous';
+  const payload = {
+    api_key: _POSTHOG_KEY_SW,
+    batch: [{
+      event: eventName,
+      distinct_id: distinctId,
+      timestamp: new Date().toISOString(),
+      properties: {
+        $lib: 'promptpro-extension-sw',
+        $lib_version: _SW_VERSION,
+        extension_version: _SW_VERSION,
+        ..._swStripContent(properties || {}),
+      },
+    }],
+  };
+  try {
+    const endpoint = _POSTHOG_HOST_SW.replace(/\/+$/, '') + '/batch/';
+    await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
+  } catch (_e) {}
+}
+
+async function swInitAnalytics() {
+  if (_sw_analyticsInit) return;
+  _sw_analyticsInit = true;
+  try {
+    const stored = await new Promise((resolve) =>
+      chrome.storage.local.get(['pp_anon_id', 'pp_analytics_opt_out'], resolve)
+    );
+    _sw_optedOut = stored.pp_analytics_opt_out === true;
+    _sw_anonId = stored.pp_anon_id || _swUuid();
+    if (!stored.pp_anon_id) chrome.storage.local.set({ pp_anon_id: _sw_anonId });
+  } catch (_e) { _sw_anonId = _swUuid(); }
+}
+
+async function swIdentifyUser(clerkUserId, properties) {
+  if (!clerkUserId || _sw_optedOut || _POSTHOG_KEY_SW === 'phc_placeholder') return;
+  _sw_distinctId = clerkUserId;
+  const payload = {
+    api_key: _POSTHOG_KEY_SW,
+    batch: [{
+      event: '$identify',
+      distinct_id: clerkUserId,
+      timestamp: new Date().toISOString(),
+      properties: {
+        $anon_distinct_id: _sw_anonId || clerkUserId,
+        $lib: 'promptpro-extension-sw',
+        $lib_version: _SW_VERSION,
+        ..._swStripContent(properties || {}),
+      },
+    }],
+  };
+  try {
+    const endpoint = _POSTHOG_HOST_SW.replace(/\/+$/, '') + '/batch/';
+    await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), keepalive: true });
+  } catch (_e) {}
+}
+
+function swTrack(eventName, properties) { _swSend(eventName, properties); }
+
+// Initialize analytics when service worker starts
+swInitAnalytics();
+
 
 // ═══════════════════════════════════════════════════════════════
 // PROMPT ANALYZER — Decompose raw prompt into components
@@ -799,6 +899,209 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // PAYWALL: Entitlement cache management
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * REFRESH_ENTITLEMENT — Fetch /api/entitlement and cache the result.
+   * Called on popup open and after every optimize response.
+   */
+  if (message.type === 'REFRESH_ENTITLEMENT') {
+    chrome.storage.local.get(['authSession', 'entitlementSnapshot'], async (result) => {
+      const session = result.authSession;
+      const defaultSnapshot = {
+        tier: 'free',
+        planStatus: 'none',
+        creditsBalance: 50,
+        monthlyCredits: 50,
+        creditsResetAt: null,
+        allowedModes: ['quick'],
+        isAdmin: false
+      };
+
+      if (!session || !session.token) {
+        chrome.storage.local.set({ entitlementSnapshot: defaultSnapshot }, () => {
+          sendResponse({ success: true, snapshot: defaultSnapshot });
+        });
+        return;
+      }
+
+      const endpoints = [
+        'https://prompt-pro-liart.vercel.app',
+        'http://localhost:3000'
+      ];
+
+      let snapshot = null;
+      for (const base of endpoints) {
+        try {
+          const resp = await fetch(`${base}/api/entitlement`, {
+            headers: { 'Authorization': `Bearer ${session.token}` }
+          });
+          if (resp.ok) {
+            snapshot = await resp.json();
+            break;
+          }
+        } catch (e) {
+          // try next endpoint
+        }
+      }
+
+      // Check if session user has admin credentials
+      const uEmail = (session.user?.email || '').toLowerCase();
+      const uUsername = (session.user?.username || '').toLowerCase();
+      const uName = (session.user?.name || '').toLowerCase();
+      const isUserAdmin = uUsername === 'admin-ceo' ||
+        uUsername.includes('admin') ||
+        uEmail.includes('shreshthabhushan19') ||
+        uEmail.includes('shreshtha') ||
+        uName.includes('shreshtha') ||
+        session.user?.role === 'admin';
+
+      if (snapshot) {
+        if (isUserAdmin) {
+          snapshot.isAdmin = true;
+          snapshot.tier = 'admin';
+          snapshot.allowedModes = ['quick', 'advanced', 'max'];
+          snapshot.creditsBalance = 999999;
+          snapshot.monthlyCredits = 999999;
+        }
+        chrome.storage.local.set({ entitlementSnapshot: snapshot }, () => {
+          sendResponse({ success: true, snapshot });
+        });
+      } else {
+        const fallback = result.entitlementSnapshot || defaultSnapshot;
+        if (isUserAdmin) {
+          fallback.isAdmin = true;
+          fallback.tier = 'admin';
+          fallback.allowedModes = ['quick', 'advanced', 'max'];
+          fallback.creditsBalance = 999999;
+          fallback.monthlyCredits = 999999;
+        }
+        chrome.storage.local.set({ entitlementSnapshot: fallback }, () => {
+          sendResponse({ success: true, snapshot: fallback });
+        });
+      }
+    });
+    return true; // async
+  }
+
+  /**
+   * GET_ENTITLEMENT_CACHE — Return the cached entitlement snapshot.
+   * Popup reads this on open to avoid a blocking fetch.
+   */
+  if (message.type === 'GET_ENTITLEMENT_CACHE') {
+    chrome.storage.local.get(['entitlementSnapshot'], (result) => {
+      const defaultSnapshot = {
+        tier: 'free',
+        planStatus: 'none',
+        creditsBalance: 50,
+        monthlyCredits: 50,
+        creditsResetAt: null,
+        allowedModes: ['quick'],
+        isAdmin: false
+      };
+      sendResponse(result.entitlementSnapshot || defaultSnapshot);
+    });
+    return true;
+  }
+
+  /**
+   * OPTIMIZE_GATED — Credit-metered optimization via /api/optimize.
+   * Only called for Plus/Max modes (quick, advanced, max).
+   * Free-tier "Basic" enhancement still uses the local engine (UPGRADE_PROMPT).
+   *
+   * On success: returns { rewritten, creditsBalance } and updates the cache.
+   * On 402 (out of credits): returns { error: 'INSUFFICIENT_CREDITS', ... }
+   * On 403 (mode locked): returns { error: 'MODE_NOT_AVAILABLE', ... }
+   */
+  if (message.type === 'OPTIMIZE_GATED') {
+    const { text, mode } = message.payload || {};
+
+    if (!text || !mode) {
+      sendResponse({ error: 'INVALID_REQUEST' });
+      return true;
+    }
+
+    chrome.storage.local.get(['authSession', 'entitlementSnapshot'], (result) => {
+      const session = result.authSession;
+      if (!session || !session.token) {
+        sendResponse({ error: 'NOT_SIGNED_IN', message: 'Please sign in via the PromptPro dashboard.' });
+        return;
+      }
+
+      const API_BASE = 'https://prompt-pro-liart.vercel.app';
+
+      fetch(`${API_BASE}/api/optimize`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ prompt: text, mode })
+      })
+        .then(async (response) => {
+          const payload = await response.json();
+
+          if (response.status === 402) {
+            swTrack('optimization_failed', { mode, error_type: 'INSUFFICIENT_CREDITS' });
+            sendResponse({
+              error: 'INSUFFICIENT_CREDITS',
+              balance: payload.balance,
+              required: payload.required,
+              message: `You're out of credits (${payload.balance || 0} left, ${payload.required} needed).`
+            });
+            return;
+          }
+
+          if (response.status === 403) {
+            swTrack('optimization_failed', { mode, error_type: 'MODE_NOT_AVAILABLE', required_tier: payload.requiredTier });
+            sendResponse({
+              error: 'MODE_NOT_AVAILABLE',
+              requiredTier: payload.requiredTier,
+              message: `This mode requires ${payload.requiredTier} — upgrade to unlock it.`
+            });
+            return;
+          }
+
+          if (!response.ok) {
+            swTrack('optimization_failed', { mode, error_type: 'OPTIMIZE_FAILED', status: response.status });
+            sendResponse({
+              error: 'OPTIMIZE_FAILED',
+              message: payload.detail || payload.error || `Server error ${response.status}`
+            });
+            return;
+          }
+
+          // Update cached credit balance from the response (no second fetch needed)
+          const cached = result.entitlementSnapshot || {};
+          const updatedSnapshot = {
+            ...cached,
+            creditsBalance: payload.creditsBalance,
+            checkedAt: new Date().toISOString()
+          };
+          chrome.storage.local.set({ entitlementSnapshot: updatedSnapshot });
+
+          swTrack('optimization_run', { mode, source: 'extension', credits_balance: payload.creditsBalance });
+
+          sendResponse({
+            success: true,
+            rewritten: payload.result,
+            creditsBalance: payload.creditsBalance
+          });
+        })
+        .catch(err => {
+          swTrack('optimization_failed', { mode, error_type: 'NETWORK_ERROR', error_message: err.message });
+          sendResponse({ error: 'NETWORK_ERROR', message: err.message });
+        });
+    });
+    return true; // async
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Existing handlers below — unchanged
+  // ─────────────────────────────────────────────────────────────
+
   if (message.type === 'UPGRADE_PROMPT') {
     const { text, siteId, strategy = 'enhance', tone = null } = message.payload || {};
 
@@ -889,9 +1192,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             applied: true
           };
           cacheUpgradeSet(cKey, payload);
+          swTrack('optimization_run', { mode: 'quick', source: 'extension', is_local: true, strategy, tone });
           sendResponse(payload);
         })
         .catch(err => {
+          swTrack('optimization_failed', { mode: 'quick', error_type: 'UPGRADE_FAILED', error_message: err.message });
           sendResponse({ error: 'UPGRADE_FAILED', message: err.message });
         });
     });
@@ -903,6 +1208,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const { actionType, value } = message.payload || {};
     if (actionType != null && value != null) {
       IntelligenceMemory.registerAction(actionType, value);
+    }
+    sendResponse({ success: true });
+    return true;
+  }
+
+  if (message.type === 'TRACK_EVENT') {
+    const { eventName, properties } = message.payload || {};
+    if (eventName && typeof swTrack === 'function') {
+      swTrack(eventName, properties || {});
     }
     sendResponse({ success: true });
     return true;
@@ -1013,6 +1327,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.storage.local.set({ authSession, skipLogin: false }, () => {
           console.log('[PromptPro] Extension synced with Clerk session for:', user.email);
         });
+
+        // Track extension authentication — user linked dashboard session to extension
+        if (user.id) {
+          swIdentifyUser(user.id, { email: user.email });
+          swTrack('extension_authenticated', { clerk_user_id: user.id });
+        }
+
         sendResponse({ success: true });
       });
     } else {
@@ -1048,6 +1369,8 @@ chrome.runtime.onInstalled.addListener((details) => {
         lowTokenEnabled: false
       }
     });
+    // Track fresh install — fires only once per device
+    swTrack('extension_installed', { extension_version: _SW_VERSION });
   }
 });
 

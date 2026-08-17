@@ -1858,11 +1858,24 @@
       // Fix 4: Enter key interception while preview is active
       document.addEventListener('keydown', (e) => {
         if (!STATE.isPreviewActive) return;
+        
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          closePopover();
+          return;
+        }
+
         if (e.key === 'Enter' && !e.shiftKey) {
           // Block Enter from submitting on any platform while popover is open
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
+          
+          const applyBtn = document.getElementById(IDS.APPLY);
+          if (applyBtn && !applyBtn.disabled) {
+            applyBtn.click();
+          }
         }
       }, { capture: true });
     }
@@ -1883,13 +1896,22 @@
     _startBodyObserver() {
       if (this.bodyObserver) return; // already running
 
-      this.bodyObserver = new MutationObserver(() => {
-        // Fast path: button exists AND is connected to DOM
-        const btn = document.getElementById(IDS.BTN);
-        if (btn && btn.isConnected) return;
+      let isScheduled = false;
 
-        // Button gone — schedule reinject
-        this._scheduleReinject();
+      this.bodyObserver = new MutationObserver(() => {
+        if (isScheduled) return;
+        isScheduled = true;
+        
+        // Wait for DOM to settle
+        setTimeout(() => {
+          isScheduled = false;
+          // Fast path: button exists AND is connected to DOM
+          const btn = document.getElementById(IDS.BTN);
+          if (btn && btn.isConnected) return;
+
+          // Button gone — schedule reinject
+          this._scheduleReinject();
+        }, 300);
       });
 
       this.bodyObserver.observe(document.body, {
@@ -1961,8 +1983,19 @@
       if (isInjected()) return;
       try {
         injectUI(this.adapter);
+        this.injectRetryCount = 0; // reset on success
       } catch (err) {
         // Injection failed — observer will retry on next DOM mutation
+        this.injectRetryCount = (this.injectRetryCount || 0) + 1;
+        if (this.injectRetryCount === 20) {
+          chrome.runtime.sendMessage({ 
+            type: 'TRACK_EVENT', 
+            payload: { 
+              eventName: 'input_detection_failed', 
+              properties: { site: this.adapter.siteId, url: location.href } 
+            } 
+          });
+        }
       }
     }
   }
