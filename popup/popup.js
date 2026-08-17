@@ -73,6 +73,7 @@
   const lowTokenToggle = document.getElementById('low-token-toggle');
   const autocompleteToggle = document.getElementById('autocomplete-toggle');
   const siteMemoryToggle = document.getElementById('site-memory-toggle');
+  const analyticsToggle = document.getElementById('analytics-toggle'); // analytics opt-out
   const strategyInputs = document.querySelectorAll('input[name="strategy"]');
   const toneSelector = document.getElementById('tone-dropdown');
   const toneDisplay = document.getElementById('current-tone');
@@ -96,19 +97,25 @@
 
   const contextAddBtn = document.getElementById('context-add-btn');
 
-  // Auth elements
+  // ═══ Header & Auth elements (Compact Apple-inspired single row) ═══
   const authScreen = document.getElementById('auth-screen');
   const authSignInBtn = document.getElementById('auth-sign-in');
   const authSkipBtn = document.getElementById('auth-skip');
-  const headerSubtitle = document.getElementById('header-subtitle');
-  const headerUserRow = document.getElementById('header-user-row');
+
+  const headerPlanBadge = document.getElementById('header-plan-badge');
+  const headerSyncIndicator = document.getElementById('header-sync-indicator');
+  const headerSyncDot = document.getElementById('header-sync-dot');
+  const headerSyncTooltip = document.getElementById('header-sync-tooltip');
+  const headerSyncTooltipStatus = document.getElementById('header-sync-tooltip-status');
+  const headerSyncTooltipTime = document.getElementById('header-sync-tooltip-time');
+  const headerAvatarBtn = document.getElementById('header-avatar-btn');
   const headerUserAvatar = document.getElementById('header-user-avatar');
-  const headerUserEmail = document.getElementById('header-user-email');
-  const headerSignInBtn = document.getElementById('header-signin-btn');
-  const headerSignOutBtn = document.getElementById('header-signout-btn');
-  const syncBar = document.getElementById('sync-bar');
-  const syncText = document.getElementById('sync-text');
-  const syncTime = document.getElementById('sync-time');
+  const headerUserInitials = document.getElementById('header-user-initials');
+
+  // ─── Analytics init (MV3-safe, from analytics.js loaded before this script) ───
+  // initAnalytics / track / identifyUser / optOut / optIn are global functions
+  // defined in popup/analytics.js (loaded via <script src="analytics.js">)
+  if (typeof initAnalytics === 'function') { initAnalytics(); }
 
   let promptDb = null;
   let authSession = null; // { token, user: { id, email, name, picture }, linkedAt }
@@ -129,47 +136,81 @@
     if (authScreen) authScreen.style.display = 'none';
   }
 
+  function getInitials(name, email) {
+    if (name && name.trim()) {
+      const parts = name.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      }
+      return name.substring(0, 2).toUpperCase();
+    }
+    if (email && email.trim()) {
+      const clean = email.split('@')[0];
+      return clean.substring(0, 2).toUpperCase();
+    }
+    return 'PP';
+  }
+
+  /**
+   * Update compact single-row header based on authentication state:
+   * - Shows Clerk profile image or fallback initials
+   * - Updates sync dot and tooltip
+   */
   function updateHeaderForAuth() {
-    if (isAuthenticated()) {
-      // Show user info in header
-      if (headerSubtitle) headerSubtitle.style.display = 'none';
-      if (headerUserRow) {
-        headerUserRow.style.display = 'flex';
-        if (headerUserAvatar && authSession.user.picture) {
-          headerUserAvatar.src = authSession.user.picture;
-          headerUserAvatar.style.display = 'block';
-        } else if (headerUserAvatar) {
-          headerUserAvatar.style.display = 'none';
-        }
-        if (headerUserEmail) {
-          headerUserEmail.textContent = authSession.user.email || '';
+    if (isAuthenticated() && authSession.user) {
+      const user = authSession.user;
+      if (headerUserAvatar && user.picture) {
+        headerUserAvatar.src = user.picture;
+        headerUserAvatar.style.display = 'block';
+        if (headerUserInitials) headerUserInitials.style.display = 'none';
+      } else {
+        if (headerUserAvatar) headerUserAvatar.style.display = 'none';
+        if (headerUserInitials) {
+          headerUserInitials.textContent = getInitials(user.name, user.email);
+          headerUserInitials.style.display = 'block';
         }
       }
-      if (headerSignInBtn) headerSignInBtn.style.display = 'none';
-      if (headerSignOutBtn) headerSignOutBtn.style.display = 'flex';
-      if (syncBar) syncBar.style.display = 'flex';
+      if (headerAvatarBtn) {
+        headerAvatarBtn.title = `${user.name || user.email || 'Clerk Account'} — Manage Account`;
+        headerAvatarBtn.classList.remove('popup__avatar-btn--loading');
+      }
+      updateSyncStatus('synced', 'Synced', 'Last sync just now');
     } else {
-      // Show default subtitle
-      if (headerSubtitle) headerSubtitle.style.display = 'block';
-      if (headerUserRow) headerUserRow.style.display = 'none';
-      if (headerSignOutBtn) headerSignOutBtn.style.display = 'none';
-      if (syncBar) syncBar.style.display = 'none';
+      if (headerUserAvatar) headerUserAvatar.style.display = 'none';
+      if (headerUserInitials) {
+        headerUserInitials.textContent = 'PP';
+        headerUserInitials.style.display = 'block';
+      }
+      if (headerAvatarBtn) {
+        headerAvatarBtn.title = 'Sign in with Clerk';
+        headerAvatarBtn.classList.remove('popup__avatar-btn--loading');
+      }
+      updateSyncStatus('offline', 'Sync offline', 'Sign in to enable cloud sync');
     }
   }
 
-  function updateSyncStatus(status, text) {
-    if (!syncBar || !syncText) return;
-    syncBar.classList.remove('popup__sync-bar--syncing', 'popup__sync-bar--error');
+  /**
+   * Update sync indicator state (green dot = synced, amber = syncing, red = error/offline)
+   */
+  function updateSyncStatus(status, statusText, timeText) {
+    if (!headerSyncDot) return;
+    headerSyncDot.classList.remove('popup__sync-dot--syncing', 'popup__sync-dot--error');
+
     if (status === 'syncing') {
-      syncBar.classList.add('popup__sync-bar--syncing');
-      if (syncTime) syncTime.textContent = 'Syncing...';
-    } else if (status === 'error') {
-      syncBar.classList.add('popup__sync-bar--error');
-      if (syncTime) syncTime.textContent = 'Sync failed';
+      headerSyncDot.classList.add('popup__sync-dot--syncing');
+      if (headerSyncTooltipStatus) headerSyncTooltipStatus.textContent = statusText || 'Syncing…';
+      if (headerSyncTooltipTime) headerSyncTooltipTime.textContent = timeText || 'Syncing data to cloud';
+      if (headerSyncIndicator) headerSyncIndicator.title = 'Syncing…';
+    } else if (status === 'error' || status === 'offline') {
+      headerSyncDot.classList.add('popup__sync-dot--error');
+      if (headerSyncTooltipStatus) headerSyncTooltipStatus.textContent = statusText || 'Sync unavailable';
+      if (headerSyncTooltipTime) headerSyncTooltipTime.textContent = timeText || 'Check connection';
+      if (headerSyncIndicator) headerSyncIndicator.title = statusText || 'Sync unavailable';
     } else {
-      if (syncTime) syncTime.textContent = 'Last sync just now';
+      if (headerSyncTooltipStatus) headerSyncTooltipStatus.textContent = statusText || 'Synced';
+      if (headerSyncTooltipTime) headerSyncTooltipTime.textContent = timeText || 'Last sync just now';
+      if (headerSyncIndicator) headerSyncIndicator.title = `${statusText || 'Synced'} · ${timeText || 'Last sync just now'}`;
     }
-    syncText.textContent = text || 'Synced';
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -631,16 +672,25 @@
   // INITIALIZATION
   // ═══════════════════════════════════════════════════════════════
 
-  chrome.storage.local.get(['settings', 'promptDb', 'authSession', 'skipLogin'], (result) => {
+  chrome.storage.local.get(['settings', 'promptDb', 'authSession', 'skipLogin', 'pp_analytics_opt_out'], (result) => {
     const settings = { ...DEFAULT_SETTINGS, ...result.settings };
     promptDb = result.promptDb || { history: [], library: [], contextBlocks: [], historyLimit: 50 };
     authSession = result.authSession || null;
     const skipLogin = result.skipLogin || false;
 
+    // ── Analytics opt-out toggle: reflect stored preference ──
+    const isAnalyticsOptOut = result.pp_analytics_opt_out === true;
+    if (analyticsToggle) analyticsToggle.checked = !isAnalyticsOptOut;
+    if (isAnalyticsOptOut && typeof optOut === 'function') optOut();
+
     // ── Auth UI State ──
     if (isAuthenticated()) {
       hideAuthScreen();
       updateHeaderForAuth();
+      // Identify user in analytics (popup context)
+      if (authSession.user && authSession.user.id && typeof identifyUser === 'function') {
+        identifyUser(authSession.user.id, { email: authSession.user.email });
+      }
       // Fetch and merge cloud data in the background
       mergeCloudAndLocal();
     } else {
@@ -650,6 +700,11 @@
           // Token found and stored — update UI
           hideAuthScreen();
           updateHeaderForAuth();
+          // Identify newly linked user in analytics
+          if (authSession && authSession.user && authSession.user.id && typeof identifyUser === 'function') {
+            identifyUser(authSession.user.id, { email: authSession.user.email });
+            if (typeof track === 'function') track('extension_authenticated', { clerk_user_id: authSession.user.id });
+          }
           mergeCloudAndLocal();
         } else if (!skipLogin) {
           // Show login screen on first use / not skipped
@@ -714,7 +769,7 @@
   });
 
   // ═══════════════════════════════════════════════════════════════
-  // AUTH EVENT LISTENERS
+  // CLERK AVATAR & AUTH EVENT LISTENERS
   // ═══════════════════════════════════════════════════════════════
 
   authSignInBtn?.addEventListener('click', () => {
@@ -724,16 +779,35 @@
   authSkipBtn?.addEventListener('click', () => {
     hideAuthScreen();
     chrome.storage.local.set({ skipLogin: true });
-    if (headerSignInBtn) headerSignInBtn.style.display = 'flex';
+    updateHeaderForAuth();
   });
 
-  headerSignInBtn?.addEventListener('click', () => {
-    showAuthScreen();
-    if (headerSignInBtn) headerSignInBtn.style.display = 'none';
+  // ── Clerk Avatar Button: Single account entry point ──
+  headerAvatarBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (isAuthenticated()) {
+      // Open Clerk Account Management in web dashboard
+      chrome.tabs.create({ url: API_BASE + '/dashboard/settings' });
+    } else {
+      // Open Clerk Sign-In
+      chrome.tabs.create({ url: API_BASE + '/login' });
+    }
   });
 
-  headerSignOutBtn?.addEventListener('click', () => {
-    signOut();
+  // ── Sync Indicator click to refresh or show tooltip ──
+  headerSyncIndicator?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (isAuthenticated()) {
+      updateSyncStatus('syncing', 'Syncing…', 'Refreshing state…');
+      chrome.runtime.sendMessage({ type: 'REFRESH_ENTITLEMENT' }, (res) => {
+        if (res && res.snapshot) {
+          renderEntitlement(res.snapshot);
+          updateSyncStatus('synced', 'Synced', 'Last sync just now');
+        } else {
+          updateSyncStatus('synced', 'Synced', 'Last sync just now');
+        }
+      });
+    }
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -817,6 +891,10 @@
     setTimeout(() => updateNavGlider(item), 50);
     setTimeout(() => updateNavGlider(item), 260);
     renderTabContent(targetId);
+
+    if (targetId === 'history' && typeof track === 'function') {
+      track('history_drawer_opened', {});
+    }
   }
 
   navItems.forEach((item, idx) => {
@@ -888,6 +966,15 @@
     saveSettings({ siteMemory: siteMemoryToggle.checked });
   });
 
+  // Analytics opt-out toggle — "Share anonymous usage data"
+  analyticsToggle?.addEventListener('change', () => {
+    if (analyticsToggle.checked) {
+      if (typeof optIn === 'function') optIn();
+    } else {
+      if (typeof optOut === 'function') optOut();
+    }
+  });
+
   strategyInputs.forEach((radio) => {
     radio.addEventListener('change', (e) => {
       if (e.target.checked) {
@@ -939,6 +1026,96 @@
   });
 
   // ═══════════════════════════════════════════════════════════════
+  // HELPERS: TIME & MARKDOWN FORMATTING
+  // ═══════════════════════════════════════════════════════════════
+
+  function formatRelativeTime(timestamp) {
+    if (!timestamp) return 'Just now';
+    const time = typeof timestamp === 'string' ? new Date(timestamp).getTime() : timestamp;
+    const now = Date.now();
+    const diffSec = Math.max(0, Math.floor((now - time) / 1000));
+
+    if (diffSec < 60) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour}h ago`;
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 7) return `${diffDay}d ago`;
+    const diffWeek = Math.floor(diffDay / 7);
+    if (diffWeek < 5) return `${diffWeek}w ago`;
+    const date = new Date(time);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function formatResetCountdown(resetAt) {
+    if (!resetAt) return 'in 30d';
+    const target = new Date(resetAt).getTime();
+    const now = Date.now();
+    const diffMs = target - now;
+    if (diffMs <= 0) return 'soon';
+    const diffMin = Math.floor(diffMs / (1000 * 60));
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+
+    if (diffDay > 0) {
+      const remainHours = diffHour % 24;
+      return remainHours > 0 ? `in ${diffDay}d ${remainHours}h` : `in ${diffDay}d`;
+    }
+    if (diffHour > 0) {
+      const remainMin = diffMin % 60;
+      return remainMin > 0 ? `in ${diffHour}h ${remainMin}m` : `in ${diffHour}h`;
+    }
+    return `in ${Math.max(1, diffMin)}m`;
+  }
+
+  function renderMarkdownToHtml(markdown) {
+    if (!markdown) return '';
+    let str = String(markdown)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Code blocks: ```lang\n ... \n```
+    str = str.replace(/```([\s\S]*?)```/g, (_, code) => {
+      return `<pre><code>${code.trim()}</code></pre>`;
+    });
+
+    // Inline code: `code`
+    str = str.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Bold: **text** or __text__
+    str = str.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    str = str.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+
+    // Italic: *text* or _text_
+    str = str.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    str = str.replace(/_([^_]+)_/g, '<em>$1</em>');
+
+    // Headings: ### Heading
+    str = str.replace(/^### (.*$)/gim, '<h3 style="font-size:13px;font-weight:700;margin:6px 0 3px 0;color:#fff;">$1</h3>');
+    str = str.replace(/^## (.*$)/gim, '<h2 style="font-size:14px;font-weight:700;margin:8px 0 4px 0;color:#fff;">$1</h2>');
+    str = str.replace(/^# (.*$)/gim, '<h1 style="font-size:15px;font-weight:700;margin:10px 0 4px 0;color:#fff;">$1</h1>');
+
+    // Unordered list items: - item or * item
+    str = str.replace(/^[\*\-] (.*$)/gim, '<li>$1</li>');
+    str = str.replace(/(<li>.*<\/li>)/gims, '<ul>$1</ul>');
+
+    // Paragraphs
+    const paragraphs = str.split(/\n\n+/);
+    return paragraphs
+      .map(p => {
+        p = p.trim();
+        if (!p) return '';
+        if (p.startsWith('<pre>') || p.startsWith('<ul>') || p.startsWith('<ol>') || p.startsWith('<h')) {
+          return p;
+        }
+        return `<p>${p.replace(/\n/g, '<br/>')}</p>`;
+      })
+      .join('');
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   // DATA ACTION HANDLERS (with cloud sync)
   // ═══════════════════════════════════════════════════════════════
 
@@ -971,6 +1148,16 @@
     const tagsRaw = (libraryTags?.value || '').trim();
     if (!text) return;
 
+    // Enforce tier limit for saved prompts
+    const currentCount = (promptDb.library || []).length;
+    const limit = window.__promptProEntitlementSnapshot?.limits?.savedPrompts ?? 25;
+    if (typeof limit === 'number' && currentCount >= limit) {
+      if (typeof showUpgradeMessage === 'function') {
+        showUpgradeMessage(`Limit reached (${limit} saved prompts on ${window.__promptProEntitlementSnapshot?.tier || 'free'} tier). Upgrade for more!`, API_BASE + '/upgrade');
+      }
+      return;
+    }
+
     const tags = tagsRaw
       ? tagsRaw.split(',').map((t) => t.trim()).filter(Boolean)
       : [];
@@ -982,6 +1169,9 @@
       if (libraryText) libraryText.value = '';
       if (libraryTags) libraryTags.value = '';
       renderTabContent('library');
+      
+      if (typeof track === 'function') track('snippet_saved', { source: 'composer', has_tags: tags.length > 0 });
+
       // Also save to cloud
       if (isAuthenticated()) {
         cloudWrite('saveLibrary', { title: title || 'Untitled', text }).catch(() => {});
@@ -995,6 +1185,16 @@
     const title = (document.getElementById('context-title')?.value || '').trim();
     const content = (document.getElementById('context-body')?.value || '').trim();
     if (!content) return;
+
+    // Enforce tier limit for context blocks
+    const currentCount = (promptDb.contextBlocks || []).length;
+    const limit = window.__promptProEntitlementSnapshot?.limits?.contextBlocks ?? 5;
+    if (typeof limit === 'number' && currentCount >= limit) {
+      if (typeof showUpgradeMessage === 'function') {
+        showUpgradeMessage(`Limit reached (${limit} context blocks on ${window.__promptProEntitlementSnapshot?.tier || 'free'} tier). Upgrade for more!`, API_BASE + '/upgrade');
+      }
+      return;
+    }
 
     try {
       const res = await sendBackground('ADD_CONTEXT_BLOCK', { title, content });
@@ -1044,7 +1244,7 @@
         return;
       }
 
-      function openDetailDrawer({ badgeText, timeText, sections, actions }) {
+      function openDetailDrawer({ badgeText, timeText, originalText, upgradedText, historyIndex, historyItem }) {
         const drawerRoot = document.getElementById('detail-drawer-root');
         const badgeEl = document.getElementById('detail-drawer-badge');
         const timeEl = document.getElementById('detail-drawer-time');
@@ -1066,46 +1266,183 @@
         contentEl.innerHTML = '';
         actionsEl.innerHTML = '';
 
-        (sections || []).forEach(sec => {
-          const secDiv = document.createElement('div');
-          secDiv.className = 'detail-drawer__section';
+        // Section 1: Complete Upgraded Prompt (Rendered Markdown)
+        const upgradedSec = document.createElement('div');
+        upgradedSec.className = 'detail-drawer__section';
+        upgradedSec.innerHTML = `
+          <div class="detail-drawer__section-header">
+            <span class="detail-drawer__label">COMPLETE UPGRADED PROMPT</span>
+          </div>
+          <div class="detail-drawer__box detail-drawer__box--highlight">
+            ${renderMarkdownToHtml(upgradedText || originalText)}
+          </div>
+        `;
+        contentEl.appendChild(upgradedSec);
 
-          const secHeader = document.createElement('div');
-          secHeader.className = 'detail-drawer__section-header';
+        // Section 2: Original Prompt (Plain Text)
+        const originalSec = document.createElement('div');
+        originalSec.className = 'detail-drawer__section';
+        originalSec.innerHTML = `
+          <div class="detail-drawer__section-header">
+            <span class="detail-drawer__label">ORIGINAL PROMPT</span>
+          </div>
+          <div class="detail-drawer__box">
+            ${originalText ? String(originalText).replace(/</g, '&lt;').replace(/>/g, '&gt;') : '(No original prompt recorded)'}
+          </div>
+        `;
+        contentEl.appendChild(originalSec);
 
-          const lbl = document.createElement('span');
-          lbl.className = 'detail-drawer__label';
-          lbl.textContent = sec.label;
-          secHeader.appendChild(lbl);
+        // ── 4-Icon Monotone Action Bar with Hover Tags ──
+        // Action 1: Copy Upgraded (Tag: Copy Upg)
+        const copyUpgWrap = document.createElement('div');
+        copyUpgWrap.className = 'detail-drawer__action-wrapper';
+        const copyUpgTag = document.createElement('span');
+        copyUpgTag.className = 'detail-drawer__tag';
+        copyUpgTag.textContent = 'Copy Upg';
+        const copyUpgradedBtn = document.createElement('button');
+        copyUpgradedBtn.type = 'button';
+        copyUpgradedBtn.className = 'detail-drawer__action-btn';
+        copyUpgradedBtn.setAttribute('aria-label', 'Copy Upgraded Prompt');
+        const copyUpgIcon = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
+        const checkIcon = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+        copyUpgradedBtn.innerHTML = copyUpgIcon;
+        copyUpgradedBtn.addEventListener('click', () => {
+          if (typeof track === 'function') track('copy_clicked', { source: 'history', type: 'upgraded', score: historyItem?.score?.total || historyItem?.score || 0 });
+          navigator.clipboard.writeText(upgradedText || originalText).then(() => {
+            copyUpgradedBtn.innerHTML = checkIcon;
+            copyUpgradedBtn.classList.add('detail-drawer__action-btn--success');
+            copyUpgTag.textContent = 'Copied!';
+            setTimeout(() => {
+              copyUpgradedBtn.innerHTML = copyUpgIcon;
+              copyUpgradedBtn.classList.remove('detail-drawer__action-btn--success');
+              copyUpgTag.textContent = 'Copy Upg';
+            }, 2000);
+          }).catch(() => {});
+        });
+        copyUpgWrap.appendChild(copyUpgradedBtn);
+        copyUpgWrap.appendChild(copyUpgTag);
+        actionsEl.appendChild(copyUpgWrap);
 
-          if (sec.badge) {
-            const secBadge = document.createElement('span');
-            secBadge.className = 'detail-drawer__badge';
-            secBadge.textContent = sec.badge;
-            secHeader.appendChild(secBadge);
+        // Action 2: Copy Original (Tag: Copy Org)
+        const copyOrgWrap = document.createElement('div');
+        copyOrgWrap.className = 'detail-drawer__action-wrapper';
+        const copyOrgTag = document.createElement('span');
+        copyOrgTag.className = 'detail-drawer__tag';
+        copyOrgTag.textContent = 'Copy Org';
+        const copyOrigBtn = document.createElement('button');
+        copyOrigBtn.type = 'button';
+        copyOrigBtn.className = 'detail-drawer__action-btn';
+        copyOrigBtn.setAttribute('aria-label', 'Copy Original Prompt');
+        const copyOrgIcon = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`;
+        copyOrigBtn.innerHTML = copyOrgIcon;
+        copyOrigBtn.addEventListener('click', () => {
+          if (typeof track === 'function') track('copy_clicked', { source: 'history', type: 'original' });
+          navigator.clipboard.writeText(originalText || upgradedText).then(() => {
+            copyOrigBtn.innerHTML = checkIcon;
+            copyOrigBtn.classList.add('detail-drawer__action-btn--success');
+            copyOrgTag.textContent = 'Copied!';
+            setTimeout(() => {
+              copyOrigBtn.innerHTML = copyOrgIcon;
+              copyOrigBtn.classList.remove('detail-drawer__action-btn--success');
+              copyOrgTag.textContent = 'Copy Org';
+            }, 2000);
+          }).catch(() => {});
+        });
+        copyOrgWrap.appendChild(copyOrigBtn);
+        copyOrgWrap.appendChild(copyOrgTag);
+        actionsEl.appendChild(copyOrgWrap);
+
+        // Action 3: Bookmark / Save to library (Tag: Save / Saved)
+        const isAlreadySaved = (promptDb.library || []).some(
+          l => (l.text === upgradedText || l.text === originalText)
+        );
+        const saveWrap = document.createElement('div');
+        saveWrap.className = 'detail-drawer__action-wrapper';
+        const saveTag = document.createElement('span');
+        saveTag.className = 'detail-drawer__tag';
+        saveTag.textContent = isAlreadySaved ? 'Saved' : 'Save';
+        const bookmarkBtn = document.createElement('button');
+        bookmarkBtn.type = 'button';
+        bookmarkBtn.className = `detail-drawer__action-btn ${isAlreadySaved ? 'detail-drawer__action-btn--active' : ''}`;
+        bookmarkBtn.setAttribute('aria-label', isAlreadySaved ? 'Saved to library' : 'Save to library');
+        const bookmarkIconOutline = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>`;
+        const bookmarkIconFilled = `<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/><polyline points="9 10 12 13 16 9" stroke="#000" stroke-width="2" fill="none"/></svg>`;
+        bookmarkBtn.innerHTML = isAlreadySaved ? bookmarkIconFilled : bookmarkIconOutline;
+        
+        bookmarkBtn.addEventListener('click', async () => {
+          const textToSave = upgradedText || originalText;
+          const titleToSave = (historyItem.site ? `${historyItem.site.charAt(0).toUpperCase() + historyItem.site.slice(1)} Prompt` : 'Saved Prompt');
+          try {
+            const res = await sendBackground('SAVE_LIBRARY_ENTRY', { title: titleToSave, text: textToSave, tags: ['history'] });
+            if (res.promptDb) mergeDb(res.promptDb);
+            bookmarkBtn.classList.add('detail-drawer__action-btn--active');
+            bookmarkBtn.innerHTML = bookmarkIconFilled;
+            saveTag.textContent = 'Saved!';
+            
+            if (typeof track === 'function' && !isAlreadySaved) track('snippet_saved', { source: 'history', has_tags: true });
+
+            if (isAuthenticated()) {
+              cloudWrite('saveLibrary', { title: titleToSave, text: textToSave }).catch(() => {});
+            }
+          } catch (err) {}
+        });
+        saveWrap.appendChild(bookmarkBtn);
+        saveWrap.appendChild(saveTag);
+        actionsEl.appendChild(saveWrap);
+
+        // Action 4: Delete with 2-Stage Arm/Confirm (Tag: Delete / Delete?)
+        const deleteWrap = document.createElement('div');
+        deleteWrap.className = 'detail-drawer__action-wrapper';
+        const deleteTag = document.createElement('span');
+        deleteTag.className = 'detail-drawer__tag';
+        deleteTag.textContent = 'Delete';
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'detail-drawer__action-btn detail-drawer__action-btn--danger';
+        deleteBtn.setAttribute('aria-label', 'Delete from history');
+        const trashIcon = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`;
+        const checkDeleteIcon = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+        deleteBtn.innerHTML = trashIcon;
+
+        let isDeleteArmed = false;
+        let deleteArmTimer = null;
+
+        const disarmDelete = () => {
+          isDeleteArmed = false;
+          deleteBtn.classList.remove('detail-drawer__action-btn--armed');
+          deleteBtn.innerHTML = trashIcon;
+          deleteTag.textContent = 'Delete';
+          if (deleteArmTimer) clearTimeout(deleteArmTimer);
+        };
+
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (!isDeleteArmed) {
+            isDeleteArmed = true;
+            deleteBtn.classList.add('detail-drawer__action-btn--armed');
+            deleteBtn.innerHTML = checkDeleteIcon;
+            deleteTag.textContent = 'Confirm?';
+            deleteArmTimer = setTimeout(disarmDelete, 3000);
+          } else {
+            // Second click: delete item
+            disarmDelete();
+            if (typeof historyIndex === 'number' && promptDb.history) {
+              promptDb.history.splice(historyIndex, 1);
+              chrome.storage.local.set({ promptDb });
+              if (isAuthenticated() && historyItem && historyItem.id) {
+                cloudWrite('deleteHistory', { id: historyItem.id }).catch(() => {});
+              }
+            }
+            closeDrawer();
+            renderTabContent('history');
           }
-
-          const box = document.createElement('div');
-          box.className = `detail-drawer__box ${sec.highlight ? 'detail-drawer__box--highlight' : ''}`;
-          box.textContent = sec.text || '';
-
-          secDiv.appendChild(secHeader);
-          secDiv.appendChild(box);
-          contentEl.appendChild(secDiv);
         });
-
-        (actions || []).forEach(act => {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = `detail-drawer__btn ${act.primary ? 'detail-drawer__btn--primary' : 'detail-drawer__btn--secondary'}`;
-          btn.textContent = act.label;
-          btn.addEventListener('click', (e) => {
-            act.onClick(btn, e);
-          });
-          actionsEl.appendChild(btn);
-        });
+        deleteWrap.appendChild(deleteBtn);
+        deleteWrap.appendChild(deleteTag);
+        actionsEl.appendChild(deleteWrap);
 
         const closeDrawer = () => {
+          disarmDelete();
           drawerRoot.classList.remove('detail-drawer--open');
           drawerRoot.setAttribute('aria-hidden', 'true');
           drawerRoot.setAttribute('inert', '');
@@ -1120,16 +1457,11 @@
       }
 
       const historyFrag = document.createDocumentFragment();
-      history.slice(0, 15).forEach((item) => {
+      history.slice(0, 15).forEach((item, index) => {
         const el = document.createElement('div');
         el.className = 'popup__history-row';
 
-        const mins = Math.round((Date.now() - item.timestamp) / 60000);
-        const timeStr = Number.isNaN(mins)
-          ? 'Just now'
-          : mins < 60
-            ? `${mins}m ago`
-            : `${Math.floor(mins / 60)}h ago`;
+        const timeStr = formatRelativeTime(item.timestamp);
 
         const scoreVal =
           item.score != null && typeof item.score === 'object' && item.score.total != null
@@ -1146,9 +1478,9 @@
           scoreBg = 'rgba(255, 214, 10, 0.15)';
         }
 
-        const modelName = item.model || 'ChatGPT';
+        const modelName = item.site ? item.site.charAt(0).toUpperCase() + item.site.slice(1) : (item.model || 'ChatGPT');
         const upgradedText = item.text || item.upgraded || '';
-        const originalText = item.original || item.prompt || '(No original prompt recorded)';
+        const originalText = item.originalText || item.original_prompt || item.original || item.prompt || item.text || '';
 
         const headerRow = document.createElement('div');
         headerRow.className = 'popup__history-header';
@@ -1197,32 +1529,10 @@
           openDetailDrawer({
             badgeText: `${modelName}  •  Score ${scoreVal}`,
             timeText: timeStr,
-            sections: [
-              { label: 'ORIGINAL PROMPT', text: originalText },
-              { label: 'COMPLETE UPGRADED PROMPT', text: upgradedText || originalText, highlight: true }
-            ],
-            actions: [
-              {
-                label: 'Copy Upgraded Prompt',
-                primary: true,
-                onClick: (btn) => {
-                  navigator.clipboard.writeText(upgradedText || originalText).then(() => {
-                    btn.textContent = '✓ Copied Upgraded Prompt!';
-                    setTimeout(() => { btn.textContent = 'Copy Upgraded Prompt'; }, 2000);
-                  }).catch(() => {});
-                }
-              },
-              {
-                label: 'Copy Original Prompt',
-                primary: false,
-                onClick: (btn) => {
-                  navigator.clipboard.writeText(originalText).then(() => {
-                    btn.textContent = '✓ Copied Original!';
-                    setTimeout(() => { btn.textContent = 'Copy Original Prompt'; }, 2000);
-                  }).catch(() => {});
-                }
-              }
-            ]
+            originalText: originalText,
+            upgradedText: upgradedText,
+            historyIndex: index,
+            historyItem: item
           });
         });
 
@@ -1305,6 +1615,7 @@
         setCopyIcon(copyBtn, false);
         copyBtn.addEventListener('click', (e) => {
           e.stopPropagation();
+          if (typeof track === 'function') track('copy_clicked', { source: 'library', type: 'snippet' });
           navigator.clipboard.writeText(item.text || '').then(() => {
             setCopyIcon(copyBtn, true);
             setTimeout(() => {
@@ -1332,8 +1643,14 @@
           });
           if (!ok) return;
           promptDb.library.splice(index, 1);
-          sendBackground('SAVE_PROMPTS', promptDb);
-          renderTabContent('library');
+          try {
+            const res = await sendBackground('SAVE_PROMPTS', promptDb);
+            if (res && res.promptDb) mergeDb(res.promptDb);
+            renderTabContent('library');
+            if (isAuthenticated() && item.id) {
+              cloudWrite('deleteSnippet', { id: item.id }).catch(() => {});
+            }
+          } catch (err) {}
         });
 
         actions.appendChild(leftActions);
@@ -1381,11 +1698,6 @@
         const previewBox = document.createElement('div');
         previewBox.className = 'popup__context-preview';
         previewBox.textContent = block.content || '';
-
-        const chipsArea = document.createElement('div');
-        chipsArea.className = 'popup__context-chips';
-
-        const sizeKb = ((block.content || '').length / 1024).toFixed(1);
 
         const actions = document.createElement('div');
         actions.className = 'popup__context-actions';
@@ -1469,4 +1781,306 @@
       });
     }
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PAYWALL: Entitlement + Mode Selector (Shared Spec)
+  // ═══════════════════════════════════════════════════════════════
+
+  const MODE_INPUT_IDS = {
+    quick: 'mode-opt-quick',
+    advanced: 'mode-opt-advanced',
+    max: 'mode-opt-max'
+  };
+
+  const MODE_TAB_IDS = {
+    quick: 'mode-tab-quick',
+    advanced: 'mode-tab-advanced',
+    max: 'mode-tab-max'
+  };
+
+  let selectedOptimizeMode = 'quick'; // default to quick mode
+
+  /**
+   * Render entitlement state into the popup UI:
+   * - Update Header plan badge (FREE, PLUS, MAX, ADMIN)
+   * - Lock/unlock mode tabs based on allowedModes
+   * - Update credit meter (Free: 50cr, Plus: 500cr, Max: 2000cr with dynamic countdown & refresh)
+   * - Keep selectedOptimizeMode valid for current tier
+   */
+  function renderEntitlement(snapshot) {
+    if (!snapshot) return;
+    window.__promptProEntitlementSnapshot = snapshot;
+
+    const tier = snapshot.tier || 'free';
+    let isAdmin = !!snapshot.isAdmin;
+    if (!isAdmin && authSession && authSession.user) {
+      const uEmail = (authSession.user.email || '').toLowerCase();
+      const uUsername = (authSession.user.username || '').toLowerCase();
+      const uName = (authSession.user.name || '').toLowerCase();
+      if (
+        uUsername === 'admin-ceo' ||
+        uUsername.includes('admin') ||
+        uEmail.includes('shreshthabhushan19') ||
+        uEmail.includes('shreshtha') ||
+        uName.includes('shreshtha') ||
+        authSession.user.role === 'admin'
+      ) {
+        isAdmin = true;
+      }
+    }
+    const allowedModes = isAdmin ? ['quick', 'advanced', 'max'] : (snapshot.allowedModes || ['quick']);
+    const creditsBalance = isAdmin ? 999999 : (snapshot.creditsBalance ?? (tier === 'max' ? 2000 : tier === 'plus' ? 500 : 50));
+    const monthlyCredits = isAdmin ? 999999 : (snapshot.monthlyCredits || (tier === 'max' ? 2000 : tier === 'plus' ? 500 : 50));
+    const creditsResetAt = snapshot.creditsResetAt || null;
+
+    // ── 1. Header Plan Badge (FREE, PLUS, MAX, ADMIN) ──
+    const planBadge = document.getElementById('header-plan-badge');
+    if (planBadge) {
+      if (isAdmin) {
+        planBadge.textContent = 'ADMIN';
+      } else if (tier === 'max') {
+        planBadge.textContent = 'MAX';
+      } else if (tier === 'plus') {
+        planBadge.textContent = 'PLUS';
+      } else {
+        planBadge.textContent = 'FREE';
+      }
+      planBadge.style.display = 'inline-block';
+    }
+
+    // ── Update AI Engine Presentation (Tier-Aware) ──
+    const aiTitle = document.getElementById('ai-engine-title');
+    const aiSub = document.getElementById('ai-engine-subtext');
+    if (aiTitle && aiSub) {
+      if (isAdmin) {
+        aiTitle.textContent = 'Ultra Optimization';
+        aiSub.textContent = 'Unlimited frontier AI optimization';
+      } else if (tier === 'max') {
+        aiTitle.textContent = 'Ultra Optimization';
+        aiSub.textContent = 'Premium frontier AI optimization';
+      } else if (tier === 'plus') {
+        aiTitle.textContent = 'Pro Optimization';
+        aiSub.textContent = 'AI-powered prompt optimization';
+      } else {
+        aiTitle.textContent = 'Quick Optimization';
+        aiSub.textContent = 'Fast AI prompt optimization (1 cr)';
+      }
+    }
+
+    // ── 2. Mode tabs (quick, advanced, max) ──
+    ['quick', 'advanced', 'max'].forEach(mode => {
+      const input = document.getElementById(MODE_INPUT_IDS[mode]);
+      const tab = document.getElementById(MODE_TAB_IDS[mode]);
+      const lockEl = document.getElementById(`mode-lock-${mode}`);
+      if (!tab) return;
+
+      const isAllowed = isAdmin || allowedModes.includes(mode);
+
+      if (isAllowed) {
+        tab.classList.remove('popup__mode-tab--locked');
+        if (input) input.disabled = false;
+        if (lockEl) lockEl.style.display = 'none';
+      } else {
+        tab.classList.add('popup__mode-tab--locked');
+        if (input) input.disabled = true;
+        if (lockEl) lockEl.style.display = 'inline-block';
+        // If currently selected mode is now locked, revert to quick
+        if (selectedOptimizeMode === mode) {
+          selectOptimizeMode('quick');
+        }
+      }
+    });
+
+    // ── 3. Usage Meter (Unified for Free 50cr, Plus 500cr, Max 2000cr) ──
+    const meter = document.getElementById('credit-meter');
+    const meterFill = document.getElementById('credit-meter-fill');
+    const labelGroup = document.getElementById('credit-meter-label-group');
+
+    if (meter) meter.style.display = 'flex';
+
+    const countdownStr = formatResetCountdown(creditsResetAt);
+    const ratio = monthlyCredits > 0 ? (creditsBalance / monthlyCredits) : 0;
+    const pct = Math.min(100, Math.max(0, Math.round(ratio * 100)));
+
+    if (isAdmin) {
+      if (labelGroup) {
+        labelGroup.innerHTML = `
+          <span class="credit-meter__count" style="color:var(--text-primary);font-weight:600;">Unlimited (admin)</span>
+        `;
+      }
+      if (meterFill) {
+        meterFill.className = 'credit-meter__fill';
+        meterFill.style.width = '100%';
+      }
+    } else if (creditsBalance <= 0) {
+      // Exhausted: amber bar, "0 / {monthlyCredits} credits · resets in {countdown}" + Upgrade link
+      if (meterFill) {
+        meterFill.className = 'credit-meter__fill credit-meter__fill--exhausted';
+        meterFill.style.width = '0%';
+      }
+      if (labelGroup) {
+        labelGroup.innerHTML = `
+          <span class="credit-meter__warning">0 / ${monthlyCredits.toLocaleString()} credits · resets ${countdownStr}</span>
+          <a href="${API_BASE}/dashboard/billing" target="_blank" class="credit-meter__upgrade-link font-medium">Upgrade plan →</a>
+        `;
+      }
+    } else if (ratio <= 0.20) {
+      // Low: amber fill, appends "· running low"
+      if (meterFill) {
+        meterFill.className = 'credit-meter__fill credit-meter__fill--low';
+        meterFill.style.width = pct + '%';
+      }
+      if (labelGroup) {
+        labelGroup.innerHTML = `
+          <span class="credit-meter__count">${creditsBalance.toLocaleString()} / ${monthlyCredits.toLocaleString()} credits</span>
+          <span class="credit-meter__countdown">· resets ${countdownStr}</span>
+          <span class="credit-meter__warning">· running low</span>
+        `;
+      }
+    } else {
+      // Normal: silver fill
+      if (meterFill) {
+        meterFill.className = 'credit-meter__fill';
+        meterFill.style.width = pct + '%';
+      }
+      if (labelGroup) {
+        labelGroup.innerHTML = `
+          <span class="credit-meter__count">${creditsBalance.toLocaleString()} / ${monthlyCredits.toLocaleString()} credits</span>
+          <span class="credit-meter__countdown">· resets ${countdownStr}</span>
+        `;
+      }
+    }
+  }
+
+  /**
+   * Switch the selected optimization mode radio input state and persist.
+   */
+  function selectOptimizeMode(mode) {
+    if (selectedOptimizeMode !== mode && typeof track === 'function') {
+      track('mode_selected', { mode, tier: window.__promptProEntitlementSnapshot?.tier || 'free' });
+    }
+    selectedOptimizeMode = mode;
+    const input = document.getElementById(MODE_INPUT_IDS[mode]);
+    if (input) {
+      input.checked = true;
+    }
+    chrome.storage.local.set({ selectedOptimizeMode: mode });
+  }
+
+  /**
+   * Show an inline upgrade message in the popup (never alert()).
+   */
+  function showUpgradeMessage(text, url) {
+    const box = document.getElementById('upgrade-message');
+    const textEl = document.getElementById('upgrade-message-text');
+    const linkEl = document.getElementById('upgrade-message-link');
+    if (!box || !textEl || !linkEl) return;
+
+    textEl.textContent = text;
+    linkEl.href = url || (API_BASE + '/dashboard/billing');
+    linkEl.onclick = (e) => {
+      e.preventDefault();
+      if (typeof track === 'function') track('upgrade_link_clicked', { source: 'upgrade_message' });
+      chrome.tabs.create({ url: linkEl.href });
+    };
+    box.style.display = 'flex';
+
+    clearTimeout(box._hideTimer);
+    box._hideTimer = setTimeout(() => { box.style.display = 'none'; }, 8000);
+  }
+
+  // ── Wire up mode tabs & inputs ──
+  ['quick', 'advanced', 'max'].forEach((mode) => {
+    const tab = document.getElementById(MODE_TAB_IDS[mode]);
+    const input = document.getElementById(MODE_INPUT_IDS[mode]);
+    if (!tab) return;
+
+    tab.addEventListener('click', (e) => {
+      if (tab.classList.contains('popup__mode-tab--locked')) {
+        e.preventDefault();
+        e.stopPropagation();
+        const requiredTier = tab.dataset.requiredTier || (mode === 'max' ? 'max' : 'plus');
+        
+        if (typeof track === 'function') track('locked_mode_clicked', { mode_attempted: mode });
+
+        showUpgradeMessage(
+          `This mode requires ${requiredTier.charAt(0).toUpperCase() + requiredTier.slice(1)} — upgrade to unlock it.`,
+          `${API_BASE}/upgrade?tier=${requiredTier}`
+        );
+        return;
+      }
+      selectOptimizeMode(mode);
+      const box = document.getElementById('upgrade-message');
+      if (box) box.style.display = 'none';
+    });
+
+    input?.addEventListener('change', () => {
+      if (input.checked) {
+        selectOptimizeMode(mode);
+      }
+    });
+  });
+
+  // ── Refresh entitlement button ──
+  const refreshBtn = document.getElementById('credit-meter-refresh');
+  if (refreshBtn) {
+    let isRefreshing = false;
+    refreshBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isRefreshing) return;
+      isRefreshing = true;
+      refreshBtn.classList.add('spin');
+
+      chrome.runtime.sendMessage({ type: 'REFRESH_ENTITLEMENT' }, (res) => {
+        if (res && res.snapshot) {
+          renderEntitlement(res.snapshot);
+        }
+        setTimeout(() => {
+          refreshBtn.classList.remove('spin');
+          isRefreshing = false;
+        }, 500);
+      });
+    });
+  }
+
+  // ── Default Fallback Entitlement (Free: 50 credits, Quick mode only) ──
+  const DEFAULT_ENTITLEMENT = {
+    tier: 'free',
+    planStatus: 'none',
+    creditsBalance: 50,
+    monthlyCredits: 50,
+    creditsResetAt: null,
+    allowedModes: ['quick'],
+    features: ['basic_optimization', 'site_profiles', 'local_history'],
+    isAdmin: false
+  };
+
+  // Immediately render default so mode locks and usage meter are NEVER missing from DOM
+  renderEntitlement(DEFAULT_ENTITLEMENT);
+
+  // ── Read cached snapshot & restore selected mode ──
+  chrome.storage.local.get(['entitlementSnapshot', 'authSession', 'selectedOptimizeMode'], (result) => {
+    if (result.selectedOptimizeMode && ['quick', 'advanced', 'max'].includes(result.selectedOptimizeMode)) {
+      selectOptimizeMode(result.selectedOptimizeMode);
+    }
+    if (result.entitlementSnapshot) {
+      renderEntitlement(result.entitlementSnapshot);
+    }
+    if (result.authSession && result.authSession.token) {
+      chrome.runtime.sendMessage({ type: 'REFRESH_ENTITLEMENT' }, (res) => {
+        if (res && res.snapshot) {
+          renderEntitlement(res.snapshot);
+        }
+      });
+    }
+  });
+
+  /**
+   * Get the current optimize mode for use by the content script upgrade button.
+   * Exposed via chrome.storage so content scripts can read it if needed.
+   */
+  window.__promptProGetOptimizeMode = () => selectedOptimizeMode;
+
 })();
+

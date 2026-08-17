@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PromptPro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -50,48 +53,39 @@
   </div>
 
   <main class="popup" id="popup-main">
+    <!-- ═══ Compact Single-Row Header (Apple-inspired) ═══ -->
     <header class="popup__header">
-      <div class="popup__logo">
-        <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="32" height="32" rx="8" fill="#1A1A1C" />
-          <path d="M16 4C16 13 21 16 28 16C21 16 16 19 16 28C16 19 11 16 4 16C11 16 16 13 16 4Z" fill="#FFFFFF" />
-        </svg>
-      </div>
-      <div class="popup__title">
-        <h1>PromptPro</h1>
-        <!-- Default subtitle — hidden when user is authenticated -->
-        <p class="popup__subtitle" id="header-subtitle">AI Prompt Companion</p>
-        <!-- Authenticated user info — hidden by default -->
-        <div class="popup__user-row" id="header-user-row" style="display:none">
-          <img id="header-user-avatar" class="popup__user-avatar" alt="" />
-          <span id="header-user-email" class="popup__user-email"></span>
+      <div class="popup__header-left">
+        <div class="popup__logo">
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="32" height="32" rx="8" fill="#1A1A1C" />
+            <path d="M16 4C16 13 21 16 28 16C21 16 16 19 16 28C16 19 11 16 4 16C11 16 16 13 16 4Z" fill="#FFFFFF" />
+          </svg>
         </div>
+        <span class="popup__brand-name">PromptPro</span>
       </div>
 
-      <!-- Sign-in link (shown when not logged in & skipped the login screen) -->
-      <button type="button" class="popup__header-signin" id="header-signin-btn" style="display:none" title="Sign In">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-      </button>
+      <div class="popup__header-right">
+        <!-- Plan Badge + Monotone Sync State Indicator -->
+        <div class="popup__plan-sync" id="header-plan-sync">
+          <span class="popup__plan-badge" id="header-plan-badge">FREE</span>
+          <div class="popup__sync-indicator" id="header-sync-indicator" title="Synced · Last sync just now">
+            <span class="popup__sync-dot" id="header-sync-dot"></span>
+            <!-- Compact Status Popover -->
+            <div class="popup__sync-tooltip" id="header-sync-tooltip">
+              <span class="popup__sync-tooltip-status" id="header-sync-tooltip-status">Synced</span>
+              <span class="popup__sync-tooltip-time" id="header-sync-tooltip-time">Last sync just now</span>
+            </div>
+          </div>
+        </div>
 
-      <!-- Sign-out button (shown when authenticated) -->
-      <button type="button" class="popup__header-signout" id="header-signout-btn" style="display:none" title="Sign Out">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-      </button>
-
-      <label class="popup__toggle">
-        <input type="checkbox" id="enabled-toggle" checked>
-        <span class="popup__toggle-slider"></span>
-      </label>
+        <!-- Clerk Account Avatar Button (Single entry point) -->
+        <button type="button" class="popup__avatar-btn" id="header-avatar-btn" title="Clerk Account Management" aria-label="Account">
+          <img id="header-user-avatar" class="popup__avatar-img" alt="" style="display:none" />
+          <span id="header-user-initials" class="popup__avatar-initials">PP</span>
+        </button>
+      </div>
     </header>
-
-    <!-- Sync Status Floating Chip (shown when authenticated) -->
-    <div class="popup__sync-bar" id="sync-bar" style="display:none">
-      <div class="popup__sync-chip">
-        <span class="popup__sync-dot"></span>
-        <span class="popup__sync-text" id="sync-text">Synced</span>
-      </div>
-      <span class="popup__sync-subtext" id="sync-time">Last sync just now</span>
-    </div>
 
     <!-- Tab Contents -->
     <div id="tab-content" class="popup__tab-content-container">
@@ -172,24 +166,90 @@
           </div>
         </section>
 
-        <section class="popup__section">
-          <h2 class="popup__section-title">AI Optimization</h2>
-          
+        <section class="popup__section" id="ai-engine-section">
           <div class="popup__option">
             <div class="popup__option-content">
-              <span class="popup__option-title">AI Engine Power</span>
-              <span class="popup__option-subtext">Enable LLM prompt enhancement</span>
+              <span class="popup__option-title" id="ai-engine-title">Pro Optimization</span>
+              <span class="popup__option-subtext" id="ai-engine-subtext">AI-powered prompt optimization</span>
             </div>
             <label class="popup__switch">
-              <input type="checkbox" id="ai-engine-toggle">
+              <input type="checkbox" id="ai-engine-toggle" checked>
               <span class="popup__switch-border"></span>
               <span class="popup__switch-track"><span class="popup__switch-thumb"></span></span>
             </label>
           </div>
         </section>
 
+        <!-- ── AI Optimization Mode (paywall-gated glass segmented control) ── -->
+        <section class="popup__section" id="optimize-mode-section">
+          <h2 class="popup__section-title">AI Optimization Mode</h2>
+
+          <!-- Liquid Glass Grid Group identical to Strategy -->
+          <div class="glass-radio-wrapper" id="optimize-mode-wrapper">
+            <div class="glass-radio-group popup__modes" id="optimize-mode-group">
+              <!-- Quick — 1 credit -->
+              <input type="radio" name="optimizeMode" id="mode-opt-quick" value="quick" checked />
+              <label class="popup__mode-tab" for="mode-opt-quick" id="mode-tab-quick" data-mode="quick" title="Quick AI optimization — 1 credit">
+                <span class="popup__mode-icon">⚡</span>
+                <span class="popup__mode-label">Quick</span>
+                <span class="popup__mode-lock" id="mode-lock-quick" style="display:none" title="Locked">🔒</span>
+              </label>
+
+              <!-- Advanced — 5 credits (Plus/Max) -->
+              <input type="radio" name="optimizeMode" id="mode-opt-advanced" value="advanced" />
+              <label class="popup__mode-tab" for="mode-opt-advanced" id="mode-tab-advanced" data-mode="advanced" data-required-tier="plus" title="Advanced AI optimization — 5 credits">
+                <span class="popup__mode-icon">🚀</span>
+                <span class="popup__mode-label">Advanced</span>
+                <span class="popup__mode-lock" id="mode-lock-advanced" style="display:none" title="Locked — Available with Plus">🔒</span>
+              </label>
+
+              <!-- Max — 10 credits (Max only) -->
+              <input type="radio" name="optimizeMode" id="mode-opt-max" value="max" />
+              <label class="popup__mode-tab" for="mode-opt-max" id="mode-tab-max" data-mode="max" data-required-tier="max" title="Max AI optimization — 10 credits">
+                <span class="popup__mode-icon">👑</span>
+                <span class="popup__mode-label">Max</span>
+                <span class="popup__mode-lock" id="mode-lock-max" style="display:none" title="Locked — Available with Max">🔒</span>
+              </label>
+
+              <div class="glass-glider glass-glider--modes"></div>
+            </div>
+          </div>
+        </section>
+
+          <!-- Usage meter component -->
+          <div class="credit-meter" id="credit-meter" style="display:flex">
+            <div class="credit-meter__track">
+              <div class="credit-meter__fill" id="credit-meter-fill" style="width:100%"></div>
+            </div>
+            <div class="credit-meter__row">
+              <div class="credit-meter__label-group" id="credit-meter-label-group">
+                <span class="credit-meter__count" id="credit-meter-count">
+                  <span id="credit-meter-balance">50</span> / <span id="credit-meter-total">50</span> credits
+                </span>
+                <span class="credit-meter__countdown" id="credit-meter-countdown">· resets in 30d</span>
+              </div>
+              <button type="button" class="credit-meter__refresh" id="credit-meter-refresh" title="Refresh credit balance" aria-label="Refresh credit balance">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Inline upgrade message (shown on 402/403 — NO alert()) -->
+          <div class="upgrade-message" id="upgrade-message" style="display:none">
+            <span class="upgrade-message__text" id="upgrade-message-text"></span>
+            <a
+              href="#"
+              class="upgrade-message__link"
+              id="upgrade-message-link"
+              target="_blank"
+              rel="noopener"
+            >View plans →</a>
+          </div>
+        </section>
+
         <section class="popup__section">
           <h2 class="popup__section-title">Preferences</h2>
+
           
           <div class="popup__option">
             <div class="popup__option-content">
@@ -246,6 +306,18 @@
             </div>
             <label class="popup__switch">
               <input type="checkbox" id="score-toggle" checked>
+              <span class="popup__switch-border"></span>
+              <span class="popup__switch-track"><span class="popup__switch-thumb"></span></span>
+            </label>
+          </div>
+
+          <div class="popup__option">
+            <div class="popup__option-content">
+              <span class="popup__option-title">Usage Analytics</span>
+              <span class="popup__option-subtext">Share anonymous usage data to improve PromptPro</span>
+            </div>
+            <label class="popup__switch">
+              <input type="checkbox" id="analytics-toggle" checked>
               <span class="popup__switch-border"></span>
               <span class="popup__switch-track"><span class="popup__switch-thumb"></span></span>
             </label>
@@ -365,6 +437,7 @@
     </div>
   </div>
 
+  <script src="analytics.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
