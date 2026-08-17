@@ -29,7 +29,9 @@ export function ExtensionSync() {
                 id: user.id,
                 email: user.primaryEmailAddress?.emailAddress || "",
                 name: user.fullName || "",
-                picture: user.imageUrl || null
+                username: user.username || "",
+                picture: user.imageUrl || null,
+                role: (user.publicMetadata as any)?.role || ""
               }
             }
           }, "*")
