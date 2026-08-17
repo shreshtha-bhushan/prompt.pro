@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useState, useEffect } from "react"
 import dynamic from "next/dynamic"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence } from "motion/react"
 import { PromptProIcon } from "@/components/shared/PromptProIcon"
 
 // Dynamically import Heatmap so SSR never fails
