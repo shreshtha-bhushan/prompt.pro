@@ -314,20 +314,27 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
   },
 ]
 
-function DraggableRow({ row }: { row: Row<z.infer<typeof schema>> }) {
-  const { transform, transition, setNodeRef, isDragging } = useSortable({
+import { motion } from "motion/react"
+
+const MotionTableRow = motion.create(TableRow)
+
+function DraggableRow({ row, index }: { row: Row<z.infer<typeof schema>>; index: number }) {
+  const { transform, transition: dndTransition, setNodeRef, isDragging } = useSortable({
     id: row.original.id,
   })
 
   return (
-    <TableRow
+    <MotionTableRow
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.04, duration: 0.3 }}
       data-state={row.getIsSelected() && "selected"}
       data-dragging={isDragging}
       ref={setNodeRef}
       className="relative z-0 data-[dragging=true]:z-10 data-[dragging=true]:opacity-80"
       style={{
         transform: CSS.Transform.toString(transform),
-        transition: transition,
+        transition: dndTransition,
       }}
     >
       {row.getVisibleCells().map((cell) => (
@@ -335,7 +342,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof schema>> }) {
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
         </TableCell>
       ))}
-    </TableRow>
+    </MotionTableRow>
   )
 }
 
@@ -526,8 +533,8 @@ export function DataTable({
                     items={dataIds}
                     strategy={verticalListSortingStrategy}
                   >
-                    {table.getRowModel().rows.map((row) => (
-                      <DraggableRow key={row.id} row={row} />
+                    {table.getRowModel().rows.map((row, index) => (
+                      <DraggableRow key={row.id} row={row} index={index} />
                     ))}
                   </SortableContext>
                 ) : (

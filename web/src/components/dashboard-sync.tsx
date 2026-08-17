@@ -18,9 +18,9 @@ export function DashboardSync({ userId }: { userId: string }) {
       const token = await getToken()
       const supabase = createClerkSupabaseClient(token)
 
-      // Subscribe to cloud changes in Supabase
+      // Subscribe to cloud changes in Supabase (unique channel name to prevent Strict Mode errors)
       channel = supabase
-        .channel("dashboard-sync")
+        .channel(`dashboard-sync-${Date.now()}`)
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "optimization_logs", filter: `user_id=eq.${userId}` },

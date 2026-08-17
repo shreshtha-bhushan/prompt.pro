@@ -1,4 +1,7 @@
+"use client"
+
 import { TrendingDownIcon, TrendingUpIcon } from "lucide-react"
+import { motion } from "motion/react"
 
 import { Badge } from "@/components/ui/badge"
 import {
@@ -9,10 +12,17 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
+const MotionCard = motion.create(Card)
+
 export function SectionCards() {
   return (
     <div className="*:data-[slot=card]:shadow-xs @xl/main:grid-cols-2 @5xl/main:grid-cols-4 grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card lg:px-6">
-      <Card className="@container/card">
+      <MotionCard 
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05, duration: 0.3 }}
+        className="@container/card"
+      >
         <CardHeader className="relative">
           <CardDescription>Total Revenue</CardDescription>
           <CardTitle className="@[250px]/card:text-3xl text-2xl font-semibold tabular-nums">
@@ -33,8 +43,13 @@ export function SectionCards() {
             Visitors for the last 6 months
           </div>
         </CardFooter>
-      </Card>
-      <Card className="@container/card">
+      </MotionCard>
+      <MotionCard 
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1, duration: 0.3 }}
+        className="@container/card"
+      >
         <CardHeader className="relative">
           <CardDescription>New Customers</CardDescription>
           <CardTitle className="@[250px]/card:text-3xl text-2xl font-semibold tabular-nums">
@@ -55,8 +70,13 @@ export function SectionCards() {
             Acquisition needs attention
           </div>
         </CardFooter>
-      </Card>
-      <Card className="@container/card">
+      </MotionCard>
+      <MotionCard 
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15, duration: 0.3 }}
+        className="@container/card"
+      >
         <CardHeader className="relative">
           <CardDescription>Active Accounts</CardDescription>
           <CardTitle className="@[250px]/card:text-3xl text-2xl font-semibold tabular-nums">
@@ -75,8 +95,13 @@ export function SectionCards() {
           </div>
           <div className="text-muted-foreground">Engagement exceed targets</div>
         </CardFooter>
-      </Card>
-      <Card className="@container/card">
+      </MotionCard>
+      <MotionCard 
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2, duration: 0.3 }}
+        className="@container/card"
+      >
         <CardHeader className="relative">
           <CardDescription>Growth Rate</CardDescription>
           <CardTitle className="@[250px]/card:text-3xl text-2xl font-semibold tabular-nums">
@@ -95,7 +120,7 @@ export function SectionCards() {
           </div>
           <div className="text-muted-foreground">Meets growth projections</div>
         </CardFooter>
-      </Card>
+      </MotionCard>
     </div>
   )
 }
