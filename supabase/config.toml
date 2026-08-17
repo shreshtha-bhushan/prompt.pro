@@ -1,0 +1,7 @@
+# Supabase project configuration
+# project_id is the ref from your Supabase URL: https://<project_id>.supabase.co
+[project]
+project_id = "njfhrvxopavloqkylmqc"
+
+[edge_runtime]
+enabled = true
