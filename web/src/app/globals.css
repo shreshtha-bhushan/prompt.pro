@@ -26,18 +26,19 @@
     --popover: 0 0% 10%;
     --popover-foreground: 0 0% 90%;
 
-    /* ── Dashboard semantic vars (used by existing components) ── */
-    --layer-1:        #0d0d0d;
-    --layer-2:        #141414;
-    --layer-3:        #1c1c1e;
-    --border-mid:     rgba(255,255,255,0.07);
-    --border-side:    rgba(255,255,255,0.05);
-    --text-primary:   rgba(255,255,255,0.92);
-    --text-secondary: rgba(255,255,255,0.48);
-    --text-tertiary:  rgba(255,255,255,0.26);
-    --accent-green:   rgba(52,199,89,0.90);
-    --accent-cyan:    rgba(50,215,255,0.80);
-    --accent-amber:   rgba(255,159,10,0.85);
+    /* ── Legacy Dashboard semantic vars mapped to tokens.css ── */
+    --layer-1:        var(--surface-0, #111111);
+    --layer-2:        var(--surface-1, #151515);
+    --layer-3:        var(--surface-2, #1A1A1C);
+    --border-mid:     var(--border-subtle, rgba(255,255,255,0.05));
+    --border-side:    var(--border-dim, rgba(255,255,255,0.03));
+    --text-primary:   var(--text-primary, rgba(255,255,255,0.92));
+    --text-secondary: var(--text-secondary, rgba(255,255,255,0.52));
+    --text-tertiary:  var(--text-tertiary, rgba(255,255,255,0.28));
+    --accent-green:   var(--score-positive, rgba(52,199,89,0.90));
+    --accent-cyan:    var(--accent-primary, #32D74B);
+    --accent-amber:   var(--warning, rgba(255,159,10,0.90));
+    --radius:         12px; /* uniform rounded corners globally */
   }
 
   * {

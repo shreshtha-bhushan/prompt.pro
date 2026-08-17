@@ -1,6 +1,11 @@
-import { CheckCircle2, ArrowLeft } from 'lucide-react';
-import { PromptSparkleIcon } from '@/components/shared/PromptSparkleIcon';
-import Link from 'next/link';
+"use client"
+
+import * as React from "react"
+import { SupportPageShell } from "@/components/support/SupportPageShell"
+import { SupportCard } from "@/components/support/SupportCard"
+import { StatusIcon } from "@/components/support/StatusIcon"
+import { SupportButton } from "@/components/support/SupportButton"
+import { PromptSparkleIcon } from "@/components/shared/PromptSparkleIcon"
 
 /**
  * Extension Linked — Success Page
@@ -11,51 +16,50 @@ import Link from 'next/link';
  */
 export default function ExtensionLinkedPage() {
   return (
-    <div className="min-h-screen bg-[#030303] text-zinc-100 flex flex-col items-center justify-center relative overflow-hidden font-sans select-none">
-      {/* Background Spotlight */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-[500px] bg-[radial-gradient(circle_at_top,rgba(52,211,153,0.08),transparent_65%)] pointer-events-none z-0" />
+    <SupportPageShell showFooter={true}>
+      <SupportCard size="md" className="text-center">
+        <div className="flex flex-col items-center">
+          {/* Status Icon with Subtle Glow */}
+          <StatusIcon type="success" size="lg" className="mb-6" />
 
-      <div className="relative z-10 flex flex-col items-center text-center gap-8 px-6 max-w-md">
-        {/* Success Icon */}
-        <div className="relative">
-          <div className="absolute -inset-4 bg-emerald-500/10 rounded-full blur-xl animate-pulse" />
-          <div className="relative w-20 h-20 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shadow-lg">
-            <CheckCircle2 className="w-10 h-10 text-emerald-400" />
-          </div>
-        </div>
-
-        {/* Text */}
-        <div className="space-y-3">
-          <h1 className="text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-400">
+          {/* Heading & Details */}
+          <h1 className="text-[24px] sm:text-[26px] font-semibold tracking-tight text-white mb-2 font-sans">
             Extension Linked
           </h1>
-          <p className="text-sm text-zinc-400 leading-relaxed max-w-xs mx-auto">
-            Your PromptPro extension is now connected to your account.
-            This tab will close automatically.
+          <p className="text-[14px] text-white/50 leading-relaxed max-w-sm mb-6 font-sans">
+            Your PromptPro extension is now authenticated and synchronized with your account. This tab will close automatically.
           </p>
-        </div>
 
-        {/* Feature badges */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] font-semibold text-zinc-300 tracking-wide uppercase">Cloud Sync Active</span>
+          {/* System Metadata Badges */}
+          <div className="flex flex-wrap items-center justify-center gap-2.5 mb-8">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[11px] font-mono font-medium text-white/80">Cloud Sync Active</span>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08]">
+              <PromptSparkleIcon size={12} className="text-white/60" />
+              <span className="text-[11px] font-mono font-medium text-white/80">Telemetry Connected</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-            <PromptSparkleIcon size={12} className="text-zinc-400" />
-            <span className="text-[10px] font-semibold text-zinc-300 tracking-wide uppercase">Data Merged</span>
+
+          {/* Action CTAs */}
+          <div className="w-full flex flex-col gap-2.5">
+            <SupportButton href="/dashboard" variant="primary" fullWidth>
+              Open Dashboard
+            </SupportButton>
+            <SupportButton
+              onClick={() => {
+                if (typeof window !== "undefined") window.close()
+              }}
+              variant="ghost"
+              fullWidth
+            >
+              Close Tab
+            </SupportButton>
           </div>
         </div>
-
-        {/* Fallback link */}
-        <Link
-          href="/"
-          className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors mt-4"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Go to Dashboard
-        </Link>
-      </div>
-    </div>
-  );
+      </SupportCard>
+    </SupportPageShell>
+  )
 }
+

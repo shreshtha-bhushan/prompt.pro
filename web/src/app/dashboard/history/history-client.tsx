@@ -13,7 +13,16 @@ import {
   ExternalLink,
   MoreHorizontal,
   ChevronDown,
+  Bookmark,
+  BookmarkCheck,
+  FileText,
 } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -41,6 +50,138 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+
+/**
+ * Lightweight, resilient Markdown-to-JSX renderer for upgraded prompt display.
+ * Renders bold, italic, headings, lists, inline code, and code blocks.
+ */
+function MarkdownPrompt({ content }: { content: string }) {
+  if (!content) return null
+
+  // Split into lines/blocks
+  const blocks = content.split(/\n\n+/)
+
+  return (
+    <div className="space-y-3 text-[13px] text-white/90 leading-relaxed font-sans select-text">
+      {blocks.map((block, bIdx) => {
+        const trimmed = block.trim()
+        if (!trimmed) return null
+
+        // Fenced code block
+        if (trimmed.startsWith("```")) {
+          const codeLines = trimmed.replace(/^```[a-zA-Z]*\n?/, "").replace(/\n?```$/, "")
+          return (
+            <pre
+              key={bIdx}
+              className="p-3 rounded-xl bg-black/50 border border-white/[0.08] font-mono text-[12px] text-white/80 overflow-x-auto my-2"
+            >
+              <code>{codeLines}</code>
+            </pre>
+          )
+        }
+
+        // Heading 3
+        if (trimmed.startsWith("### ")) {
+          return (
+            <h3 key={bIdx} className="text-[14px] font-bold text-white mt-3 mb-1">
+              {renderInlineMarkdown(trimmed.replace(/^### /, ""))}
+            </h3>
+          )
+        }
+
+        // Heading 2
+        if (trimmed.startsWith("## ")) {
+          return (
+            <h2 key={bIdx} className="text-[15px] font-bold text-white mt-3.5 mb-1.5">
+              {renderInlineMarkdown(trimmed.replace(/^## /, ""))}
+            </h2>
+          )
+        }
+
+        // Heading 1
+        if (trimmed.startsWith("# ")) {
+          return (
+            <h1 key={bIdx} className="text-[16px] font-bold text-white mt-4 mb-2">
+              {renderInlineMarkdown(trimmed.replace(/^# /, ""))}
+            </h1>
+          )
+        }
+
+        // Unordered / Ordered list
+        const lines = trimmed.split("\n")
+        const isList = lines.every((l) => /^\s*([*\-]|\d+\.)\s+/.test(l))
+        if (isList) {
+          return (
+            <ul key={bIdx} className="list-disc pl-5 space-y-1 my-2 text-white/85">
+              {lines.map((l, lIdx) => {
+                const clean = l.replace(/^\s*([*\-]|\d+\.)\s+/, "")
+                return <li key={lIdx}>{renderInlineMarkdown(clean)}</li>
+              })}
+            </ul>
+          )
+        }
+
+        // Standard Paragraph with inline formatting
+        return (
+          <p key={bIdx} className="leading-relaxed">
+            {lines.map((line, lIdx) => (
+              <React.Fragment key={lIdx}>
+                {lIdx > 0 && <br />}
+                {renderInlineMarkdown(line)}
+              </React.Fragment>
+            ))}
+          </p>
+        )
+      })}
+    </div>
+  )
+}
+
+function renderInlineMarkdown(text: string): React.ReactNode[] {
+  // Regex to match inline tokens: bold (**text**), italic (*text*), inline code (`code`)
+  const parts: React.ReactNode[] = []
+  const tokenRegex = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = tokenRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index))
+    }
+
+    const token = match[0]
+    if (token.startsWith("**") && token.endsWith("**")) {
+      parts.push(
+        <strong key={match.index} className="font-semibold text-white">
+          {token.slice(2, -2)}
+        </strong>
+      )
+    } else if (token.startsWith("*") && token.endsWith("*")) {
+      parts.push(
+        <em key={match.index} className="italic text-white/90">
+          {token.slice(1, -1)}
+        </em>
+      )
+    } else if (token.startsWith("`") && token.endsWith("`")) {
+      parts.push(
+        <code
+          key={match.index}
+          className="px-1.5 py-0.5 rounded bg-white/[0.08] font-mono text-[11.5px] text-white/90"
+        >
+          {token.slice(1, -1)}
+        </code>
+      )
+    }
+
+    lastIndex = match.index + token.length
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex))
+  }
+
+  return parts.length > 0 ? parts : [text]
+}
 
 function formatRelativeTime(dateStr: string): string {
   if (!dateStr) return "just now"
@@ -115,6 +256,9 @@ export function HistoryClient({
   const [selectedLog, setSelectedLog] = useState<any | null>(null)
   const [copied, setCopied] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
+  const [armedDeleteId, setArmedDeleteId] = useState<string | null>(null)
+  const deleteTimerRef = React.useRef<NodeJS.Timeout | null>(null)
   const ITEMS_PER_PAGE = 15
 
   useEffect(() => {
@@ -676,11 +820,17 @@ export function HistoryClient({
           {selectedLog && (
             <div className="space-y-6">
               <SheetHeader>
-                <SheetTitle className="text-[18px] font-semibold text-white">
-                  Prompt Details
-                </SheetTitle>
+                <div className="flex items-center justify-between">
+                  <SheetTitle className="text-[18px] font-semibold text-white">
+                    Prompt Details
+                  </SheetTitle>
+                  <span className="text-[12px] font-mono text-white/40">
+                    {formatRelativeTime(selectedLog.created_at)}
+                  </span>
+                </div>
               </SheetHeader>
 
+              {/* Model & Strategy metadata row */}
               <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex-wrap gap-2">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
@@ -699,40 +849,144 @@ export function HistoryClient({
                 <ScorePill delta={(selectedLog.score_after || 0) - (selectedLog.score_before || 0)} />
               </div>
 
+              {/* Upgraded Prompt (Rendered Markdown) */}
               <div>
                 <div className="text-[11px] font-mono uppercase tracking-wider text-white/40 mb-2">
-                  Upgraded Prompt
+                  Complete Upgraded Prompt
                 </div>
-                <div className="p-4 rounded-2xl bg-[#1A1A1C] border border-white/[0.06] text-[13px] text-white/90 leading-relaxed font-mono relative">
-                  {selectedLog.upgraded_prompt}
+                <div className="p-4 rounded-2xl bg-[#1A1A1C] border border-white/[0.08] relative">
+                  <MarkdownPrompt content={selectedLog.upgraded_prompt} />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(selectedLog.upgraded_prompt || "")}
-                  className="mt-2 inline-flex items-center gap-1.5 h-[34px] px-4 rounded-xl bg-white text-[#111111] text-[12px] font-semibold hover:bg-white/90 transition-all"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-black" />
-                      <span>Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Copy Upgraded Prompt</span>
-                    </>
-                  )}
-                </button>
               </div>
 
+              {/* Original Prompt */}
               <div>
                 <div className="text-[11px] font-mono uppercase tracking-wider text-white/40 mb-2">
                   Original Prompt
                 </div>
-                <div className="p-4 rounded-2xl bg-[#1A1A1C]/50 border border-white/[0.04] text-[13px] text-white/60 leading-relaxed font-mono">
-                  {selectedLog.original_prompt}
+                <div className="p-4 rounded-2xl bg-[#1A1A1C]/50 border border-white/[0.04] text-[13px] text-white/60 leading-relaxed font-mono select-text">
+                  {selectedLog.original_prompt || "(No original prompt recorded)"}
                 </div>
               </div>
+
+              {/* 4-Icon Monotone Action Bar with Hover Tags */}
+              <TooltipProvider delayDuration={150}>
+                <div className="grid grid-cols-4 gap-2 pt-2">
+                  {/* Action 1: Copy Upgraded */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(selectedLog.upgraded_prompt || "")}
+                        aria-label="Copy Upgraded Prompt"
+                        className={`h-[42px] rounded-xl flex items-center justify-center border transition-all ${
+                          copied
+                            ? "bg-white/20 border-white/30 text-white"
+                            : "bg-white/[0.05] hover:bg-white/[0.12] border-white/[0.08] text-white/80 hover:text-white"
+                        }`}
+                      >
+                        {copied ? (
+                          <Check className="w-4 h-4 text-white" />
+                        ) : (
+                          <Copy className="w-4 h-4" />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="bg-[#111111] border border-white/[0.15] text-white text-[11px] font-mono shadow-xl rounded-md px-2.5 py-1">
+                      {copied ? "Copied!" : "Copy Upg"}
+                    </TooltipContent>
+                  </Tooltip>
+
+                  {/* Action 2: Copy Original */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(selectedLog.original_prompt || selectedLog.upgraded_prompt || "")}
+                        aria-label="Copy Original Prompt"
+                        className="h-[42px] rounded-xl flex items-center justify-center bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] text-white/80 hover:text-white transition-all"
+                      >
+                        <FileText className="w-4 h-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="bg-[#111111] border border-white/[0.15] text-white text-[11px] font-mono shadow-xl rounded-md px-2.5 py-1">
+                      Copy Org
+                    </TooltipContent>
+                  </Tooltip>
+
+                  {/* Action 3: Save to Library */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const textToSave = selectedLog.upgraded_prompt || selectedLog.original_prompt;
+                          const titleToSave = `${formatSiteName(selectedLog.site)} Prompt`;
+                          await supabase.from("snippets").insert({
+                            user_id: userId,
+                            title: titleToSave,
+                            content: textToSave,
+                            type: "snippet",
+                          });
+                          setSavedIds((prev) => new Set(prev).add(selectedLog.id));
+                        }}
+                        aria-label={savedIds.has(selectedLog.id) ? "Saved to library" : "Save to library"}
+                        className={`h-[42px] rounded-xl flex items-center justify-center border transition-all ${
+                          savedIds.has(selectedLog.id)
+                            ? "bg-white/20 border-white/30 text-white"
+                            : "bg-white/[0.05] hover:bg-white/[0.12] border-white/[0.08] text-white/80 hover:text-white"
+                        }`}
+                      >
+                        {savedIds.has(selectedLog.id) ? (
+                          <BookmarkCheck className="w-4 h-4 text-white" />
+                        ) : (
+                          <Bookmark className="w-4 h-4" />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="bg-[#111111] border border-white/[0.15] text-white text-[11px] font-mono shadow-xl rounded-md px-2.5 py-1">
+                      {savedIds.has(selectedLog.id) ? "Saved" : "Save"}
+                    </TooltipContent>
+                  </Tooltip>
+
+                  {/* Action 4: Delete */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          if (armedDeleteId !== selectedLog.id) {
+                            setArmedDeleteId(selectedLog.id);
+                            if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+                            deleteTimerRef.current = setTimeout(() => {
+                              setArmedDeleteId(null);
+                            }, 3000);
+                          } else {
+                            if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+                            setArmedDeleteId(null);
+                            handleDelete(selectedLog.id, e);
+                          }
+                        }}
+                        aria-label="Delete item from history"
+                        className={`h-[42px] rounded-xl flex items-center justify-center border transition-all ${
+                          armedDeleteId === selectedLog.id
+                            ? "bg-red-500/20 border-red-500/40 text-red-400 font-mono text-[11px] font-bold"
+                            : "bg-white/[0.05] hover:bg-red-500/15 border-white/[0.08] hover:border-red-500/30 text-white/80 hover:text-red-400"
+                        }`}
+                      >
+                        {armedDeleteId === selectedLog.id ? (
+                          <span>Delete?</span>
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="bg-[#111111] border border-white/[0.15] text-white text-[11px] font-mono shadow-xl rounded-md px-2.5 py-1">
+                      {armedDeleteId === selectedLog.id ? "Click to confirm" : "Delete"}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </TooltipProvider>
             </div>
           )}
         </SheetContent>
