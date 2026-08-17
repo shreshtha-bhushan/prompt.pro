@@ -1,16 +1,16 @@
-import { SignIn } from "@clerk/nextjs"
+import { SignUp } from "@clerk/nextjs"
 import { SupportPageShell } from "@/components/support/SupportPageShell"
 import { promptProClerkAppearance } from "@/lib/clerk-theme"
 
-export default function LoginPage() {
+export default function SignUpPage() {
   return (
-    <SupportPageShell backHref="/" backLabel="Home">
+    <SupportPageShell backHref="/login" backLabel="Sign in">
       <div className="w-full max-w-[440px] flex flex-col items-center">
-        <SignIn
+        <SignUp
           appearance={promptProClerkAppearance}
           routing="path"
-          path="/login"
-          signUpUrl="/sign-up"
+          path="/sign-up"
+          signInUrl="/login"
         />
       </div>
     </SupportPageShell>

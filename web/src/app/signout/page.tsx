@@ -1,30 +1,35 @@
-"use client";
+"use client"
 
-import { useAuth } from "@clerk/nextjs";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs"
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { SupportPageShell } from "@/components/support/SupportPageShell"
+import { LoadingState } from "@/components/support/LoadingState"
 
 export default function SignOutPage() {
-  const { signOut, isLoaded } = useAuth();
-  const router = useRouter();
+  const { signOut, isLoaded } = useAuth()
+  const router = useRouter()
 
   useEffect(() => {
     if (isLoaded) {
       signOut().then(() => {
-        // If this was opened in a background tab by the extension, we can try to close it
-        // Or if it's the main tab, redirect to the home page
-        if (window.history.length <= 1) {
-          window.close();
+        // If this was opened in a background tab by the extension, try to close it
+        if (typeof window !== "undefined" && window.history.length <= 1) {
+          window.close()
         } else {
-          router.push("/");
+          router.push("/")
         }
-      });
+      })
     }
-  }, [isLoaded, signOut, router]);
+  }, [isLoaded, signOut, router])
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-black">
-      <div className="text-white">Signing out...</div>
-    </div>
-  );
+    <SupportPageShell showFooter={false}>
+      <LoadingState
+        title="Signing Out"
+        description="Securing your session and clearing local tokens..."
+      />
+    </SupportPageShell>
+  )
 }
+

@@ -16,6 +16,7 @@
 # misc
 .DS_Store
 *.pem
+*.key
 
 # debug
 npm-debug.log*
@@ -23,7 +24,15 @@ yarn-debug.log*
 yarn-error.log*
 
 # env
+.env
+.env.*
 .env*.local
+.env.production
+.env.prod.test
+
+# explicitly track example files
+!.env.example
+!.env*.example
 
 # vercel
 .vercel

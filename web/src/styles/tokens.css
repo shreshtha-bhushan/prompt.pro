@@ -112,6 +112,13 @@
   --duration-fast:   160ms;
   --duration-normal: 200ms;
   --ease-standard:   cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* ── USAGE METER TOKENS ─────────────────────────────────── */
+  --meter-track: rgba(255, 255, 255, 0.08);
+  --meter-fill: rgba(200, 200, 210, 0.85);
+  --meter-fill-low: #f59e0b;
+  --meter-height: 4px;
+  --meter-radius: 2px;
 }
 
 /* ── REDUCED MOTION ───────────────────────────────────────── */

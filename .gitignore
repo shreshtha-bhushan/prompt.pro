@@ -1,3 +1,66 @@
+# Dependencies
+node_modules/
+web/node_modules/
+.pnp
+.pnp.js
+
+# Environment variables
+.env
+.env.*
+.env*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+.env.prod.test
+web/.env
+web/.env.*
+web/.env*.local
+web/.env.local
+web/.env.production
+web/.env.prod.test
 functions/.env
-.vercel
-.env*
+
+# Explicitly track env example templates
+!.env.example
+!.env*.example
+!web/.env.example
+!web/.env*.example
+
+# Next.js build & caches
+.next/
+web/.next/
+out/
+web/out/
+build/
+web/build/
+
+# Vercel & Cloudflare
+.vercel/
+web/.vercel/
+
+# Testing & Coverage
+coverage/
+web/coverage/
+
+# Logs & Debugging
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+h
+gitleaks-report.json
+
+# Certificates & Private Keys
+*.pem
+*.key
+*.crt
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Supabase Local Cache & Secrets
+supabase/.temp/
+.clerk/
+web/.clerk/
