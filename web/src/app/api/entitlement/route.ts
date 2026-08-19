@@ -1,34 +1,30 @@
 /**
- * PromptPro — /api/entitlement — Extension-facing entitlement snapshot
+ * PromptPro — /api/entitlement — Extension & UI Entitlement Snapshot
  *
- * Called by the extension service worker to get the current user's plan tier,
- * credit balance, and allowed optimization modes.
- *
- * Auth: Bearer token (Clerk JWT) in Authorization header.
- * The extension sends the token it already has from the authSession cache.
+ * Called by the extension service worker and UI components to get the
+ * user's current plan tier, credit balance, and allowed optimization modes.
  */
 
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { PLAN_LIMITS, type PlanTier, type OptimizationMode } from "@/lib/plans";
 import { ensureProfile } from "@/lib/entitlement";
 import { getRole } from "@/lib/roles";
+import { getCorsHeaders, handleOptions } from "@/lib/cors";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
-
-export async function OPTIONS() {
-  return new Response(null, { status: 204, headers: corsHeaders });
+export async function OPTIONS(request: NextRequest) {
+  return handleOptions(request);
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const corsHeaders = getCorsHeaders(request);
+
   const { userId } = await auth();
   if (!userId) {
-    return Response.json(
-      { error: "unauthorized" },
+    return NextResponse.json(
+      { error: "unauthorized", code: "AUTH_REQUIRED" },
       { status: 401, headers: corsHeaders }
     );
   }
@@ -41,9 +37,11 @@ export async function GET() {
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
     isAdmin = getRole(user) === "admin";
-  } catch (e) {}
+  } catch (e) {
+    console.error("[/api/entitlement] Clerk user error:", e);
+  }
 
-  let data: any = null;
+  let data: { plan_tier?: string; credits_balance?: number; credits_reset_at?: string | null; plan_status?: string; whop_customer_id?: string | null } | null = null;
   try {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -76,5 +74,5 @@ export async function GET() {
     checkedAt: new Date().toISOString(),
   };
 
-  return Response.json(snapshot, { headers: corsHeaders });
+  return NextResponse.json(snapshot, { headers: corsHeaders });
 }

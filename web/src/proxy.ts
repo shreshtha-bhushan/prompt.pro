@@ -2,27 +2,39 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
 // Public routes that don't require authentication
 const isPublicRoute = createRouteMatcher([
-  '/', 
+  '/',
   '/login(.*)',
-  '/api/upgrade(.*)'
+  '/sign-up(.*)',
+  '/about(.*)',
+  '/demo(.*)',
+  '/terms(.*)',
+  '/privacy(.*)',
+  '/api/webhooks(.*)',
+  '/icon.svg',
+  '/icon',
+  '/apple-icon',
+  '/opengraph-image',
+  '/twitter-image',
+  '/sitemap.xml',
+  '/robots.txt',
 ])
 
 // API routes get 401 JSON instead of a redirect
 const isApiRoute = createRouteMatcher(['/api/(.*)'])
 
-// Next.js 16 uses proxy instead of middleware
-export const proxy = clerkMiddleware((auth, req) => {
+// In Next.js 16, proxy.ts replaces middleware.ts
+export const proxy = clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {
     if (isApiRoute(req)) {
-      // For API routes, let individual handlers check auth and return JSON 401s
+      // For API routes, individual handlers check auth and return JSON 401s
       return
     }
     // For UI routes, protect() triggers a server-side redirect to /login — no flicker
-    auth.protect()
+    await auth.protect()
   }
 })
 
-export default proxy;
+export default proxy
 
 export const config = {
   matcher: [

@@ -2,34 +2,28 @@
  * PromptPro — Whop Webhook Handler
  * POST /api/webhooks/whop
  *
- * Receives membership lifecycle events from Whop and updates the user's
- * plan tier and credit balance in Supabase.
- *
- * IMPORTANT — Before going to production:
- * 1. Verify the actual event type strings in the Whop dashboard/sandbox docs.
- *    The strings used here ("membership.went_valid", etc.) are illustrative.
- * 2. Verify the actual field paths for clerk_user_id and plan_id by inspecting
- *    a real logged payload in whop_webhook_events.payload during sandbox testing.
- * 3. Configure the webhook endpoint in Whop dashboard to point at:
- *    https://prompt-pro-liart.vercel.app/api/webhooks/whop
- *
- * Idempotency: Each event is logged by event_id before processing.
- * Duplicate deliveries (Whop retries) are silently acknowledged.
+ * Security & Hardening:
+ *   1. HMAC-SHA256 signature verification with constant-time comparison (timing-safe)
+ *   2. Strict execution order: signature validated BEFORE any database access
+ *   3. Deterministic idempotency key derivation (dedupes retries even if webhook headers are omitted)
+ *   4. Safe payload extraction with defensive type checks
+ *   5. Rate limiting protection for webhook endpoint
  */
 
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { posthogServer, shutdownPosthog } from "@/lib/posthog-server";
+import { rateLimit } from "@/lib/ratelimit";
+import crypto from "node:crypto";
 
 export const dynamic = "force-dynamic";
 
-// Service-role client — bypasses RLS, used only in this server-only route
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Map Whop plan IDs (or product IDs) to internal tier + billing period
 function buildPlanMap(): Record<
   string,
   { tier: "plus" | "max"; period: "monthly" | "annual" }
@@ -52,7 +46,6 @@ function buildPlanMap(): Record<
     map[process.env.WHOP_MAX_PLAN_ID_ANNUAL] = { tier: "max", period: "annual" };
   }
 
-  // Fallback: If separate plan IDs are not specified, map the product IDs directly!
   if (process.env.WHOP_PLUS_PRODUCT_ID) {
     map[process.env.WHOP_PLUS_PRODUCT_ID] = { tier: "plus", period: "monthly" };
   }
@@ -66,12 +59,7 @@ function buildPlanMap(): Record<
 const MONTHLY_CREDITS = { plus: 500, max: 2000 } as const;
 
 /**
- * Verify a Whop webhook signature.
- * Whop signs webhooks using HMAC-SHA256. The secret is the raw value of
- * WHOP_WEBHOOK_SECRET. Header: x-whop-signature (format: "sha256=<hex>").
- *
- * NOTE: Adjust this if the @whop/sdk package becomes available —
- * the SDK provides a ready-made verifier. This is a manual fallback.
+ * Constant-time comparison of webhook HMAC signature against computed hash
  */
 async function verifyWhopSignature(
   body: string,
@@ -80,35 +68,85 @@ async function verifyWhopSignature(
   const secret = process.env.WHOP_WEBHOOK_SECRET;
   if (!secret) return false;
 
-  const signature = headers.get("x-whop-signature") ?? "";
-  const [algo, expectedHex] = signature.split("=");
-  if (algo !== "sha256" || !expectedHex) return false;
+  const signatureHeader =
+    headers.get("x-whop-signature") ??
+    headers.get("webhook-signature") ??
+    headers.get("svix-signature") ??
+    "";
+
+  if (!signatureHeader) return false;
+
+  // Handle format "sha256=<hex>" or raw hex
+  const parts = signatureHeader.split("=");
+  const expectedHex = parts.length === 2 ? parts[1] : parts[0];
+  if (!expectedHex) return false;
 
   const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
+  const key = await crypto.webcrypto.subtle.importKey(
     "raw",
     enc.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
-  const sigBuffer = await crypto.subtle.sign("HMAC", key, enc.encode(body));
+  const sigBuffer = await crypto.webcrypto.subtle.sign("HMAC", key, enc.encode(body));
   const actualHex = Array.from(new Uint8Array(sigBuffer))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 
   // Constant-time comparison
-  return actualHex === expectedHex;
+  try {
+    const bufActual = Buffer.from(actualHex, "hex");
+    const bufExpected = Buffer.from(expectedHex, "hex");
+    if (bufActual.length !== bufExpected.length) return false;
+    return crypto.timingSafeEqual(bufActual, bufExpected);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Generate a deterministic hash for deduplicating retried webhooks
+ */
+function getDeterministicEventId(
+  headers: Headers,
+  eventType: string,
+  data: Record<string, unknown>
+): string {
+  const explicitId =
+    headers.get("webhook-id") ??
+    headers.get("svix-id") ??
+    headers.get("x-whop-event-id");
+
+  if (explicitId && explicitId.trim().length > 0) {
+    return explicitId.trim();
+  }
+
+  // Derive stable hash from payload attributes
+  const membershipId = String(data.id ?? "");
+  const planId = String(data.plan_id ?? data.product_id ?? "");
+  const meta = (data.metadata as Record<string, unknown>) || {};
+  const clerkUserId = String(meta.clerk_user_id ?? "");
+
+  const fingerprint = `${eventType}:${clerkUserId}:${membershipId}:${planId}`;
+  return crypto.createHash("sha256").update(fingerprint).digest("hex").slice(0, 36);
 }
 
 export async function POST(request: NextRequest) {
+  // ── 1. Rate Limiting for Webhooks ─────────────────────────
+  const clientIp = request.headers.get("x-forwarded-for") || "whop-webhook";
+  const rateLimitResult = await rateLimit("webhook", clientIp);
+  if (!rateLimitResult.success) {
+    return new Response("Too many requests", { status: 429 });
+  }
+
   const bodyText = await request.text();
 
-  // Signature verification
+  // ── 2. Signature Verification (Strictly BEFORE DB lookup) ──
   const valid = await verifyWhopSignature(bodyText, request.headers);
   if (!valid) {
-    console.error("[Whop Webhook] Invalid signature");
-    return new Response("Invalid webhook signature", { status: 400 });
+    console.error("[Whop Webhook] Invalid webhook signature detected");
+    return new Response("Invalid webhook signature", { status: 401 });
   }
 
   let event: Record<string, unknown>;
@@ -118,14 +156,11 @@ export async function POST(request: NextRequest) {
     return new Response("Invalid JSON payload", { status: 400 });
   }
 
-  // Derive a stable event id (Whop may use different header names)
-  const eventId =
-    request.headers.get("webhook-id") ??
-    request.headers.get("svix-id") ??
-    request.headers.get("x-whop-event-id") ??
-    `${event.type ?? "unknown"}_${Date.now()}_${crypto.randomUUID()}`;
+  const data = (event.data ?? {}) as Record<string, unknown>;
+  const eventType = String(event.type ?? "unknown");
+  const eventId = getDeterministicEventId(request.headers, eventType, data);
 
-  // ── Idempotency check ─────────────────────────────────────
+  // ── 3. Idempotency Verification ───────────────────────────
   const { data: existing } = await supabase
     .from("whop_webhook_events")
     .select("id")
@@ -133,43 +168,30 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (existing) {
-    // Already processed — acknowledge without reprocessing
+    // Already processed — return 200 OK without re-running mutations
     return new Response("OK", { status: 200 });
   }
 
-  // Log the raw event before processing so we can inspect field paths in sandbox
+  // Log raw event
   const { error: insertErr } = await supabase
     .from("whop_webhook_events")
     .insert({
       event_id: eventId,
-      event_type: String(event.type ?? "unknown"),
+      event_type: eventType,
       payload: event,
     });
 
   if (insertErr) {
-    console.error("[Whop Webhook] Failed to log event:", insertErr);
-    // Don't block processing on logging failure
+    console.error("[Whop Webhook] Failed to log raw webhook event:", insertErr);
   }
 
-  // ── Field extraction ──────────────────────────────────────
-  // Whop webhook structure (from sandbox logs):
-  //   { type, data: { id, plan_id, user: { id, username }, metadata: { clerk_user_id } } }
-  //
-  // whop_user_id  → data.user.id   (Whop's own user identifier, used for checkAccess)
-  // clerk_user_id → data.metadata.clerk_user_id  (set via checkout metadata)
-  // plan_id       → data.plan_id
-  // membership_id → data.id
-  const data = (event.data ?? {}) as Record<string, unknown>;
-
+  // ── 4. Payload Extraction ─────────────────────────────────
   const metaObj = (data.metadata as Record<string, unknown> | undefined) ?? {};
   const clerkUserId = (metaObj.clerk_user_id ?? "") as string;
 
-  // Whop's own user object lives at data.user or data.user_id
-  const userObj = (data.user as Record<string, unknown> | undefined);
+  const userObj = data.user as Record<string, unknown> | undefined;
   const whopUserId = ((userObj?.id ?? data.user_id ?? data.whop_user_id) ?? "") as string;
-  const whopUsername = ((userObj?.username ?? data.username) ?? "") as string;
 
-  // Check plan_id or product_id (or nested plan/product objects)
   const planObj = data.plan as Record<string, unknown> | undefined;
   const prodObj = data.product as Record<string, unknown> | undefined;
   const planId = ((data.plan_id ?? data.product_id ?? planObj?.id ?? prodObj?.id) ?? "") as string;
@@ -177,10 +199,8 @@ export async function POST(request: NextRequest) {
 
   const planMap = buildPlanMap();
 
-  // ── Event processing ──────────────────────────────────────
+  // ── 5. Event Processing ───────────────────────────────────
   if (clerkUserId) {
-    const eventType = String(event.type ?? "");
-
     const isValidEvent =
       eventType === "membership_activated" ||
       eventType === "membership.went_valid" ||
@@ -198,12 +218,9 @@ export async function POST(request: NextRequest) {
     if (isValidEvent && planId) {
       const mapping = planMap[planId];
       if (mapping) {
-        const resetAt = new Date(
-          Date.now() + 30 * 24 * 60 * 60 * 1000
-        ).toISOString();
+        const resetAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
         const newCredits = MONTHLY_CREDITS[mapping.tier];
 
-        // Fetch previous tier for comparison
         const { data: prevProfile } = await supabase
           .from("profiles")
           .select("plan_tier")
@@ -217,7 +234,6 @@ export async function POST(request: NextRequest) {
             plan_status: "active",
             billing_period: mapping.period,
             whop_membership_id: membershipId,
-            // Save Whop's own user ID — used for server-side checkAccess validation
             ...(whopUserId ? { whop_customer_id: whopUserId } : {}),
             credits_balance: newCredits,
             credits_reset_at: resetAt,
@@ -231,7 +247,6 @@ export async function POST(request: NextRequest) {
           reason: "monthly_reset",
         });
 
-        // PostHog: server-side checkout_completed event
         posthogServer.capture({
           distinctId: clerkUserId,
           event: "checkout_completed",
@@ -244,7 +259,6 @@ export async function POST(request: NextRequest) {
         });
       }
     } else if (isInvalidEvent || isPaymentFailedEvent) {
-      // Fetch previous tier before downgrade
       const { data: prevProfile } = await supabase
         .from("profiles")
         .select("plan_tier")
@@ -261,7 +275,6 @@ export async function POST(request: NextRequest) {
         })
         .eq("clerk_id", clerkUserId);
 
-      // PostHog: server-side plan lifecycle event
       posthogServer.capture({
         distinctId: clerkUserId,
         event: isPaymentFailedEvent ? "plan_downgraded" : "plan_canceled",
@@ -273,7 +286,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Mark as processed
+  // Mark event as processed
   await supabase
     .from("whop_webhook_events")
     .update({
@@ -282,7 +295,6 @@ export async function POST(request: NextRequest) {
     })
     .eq("event_id", eventId);
 
-  // Flush PostHog events before the serverless function exits
   await shutdownPosthog();
 
   return new Response("OK", { status: 200 });

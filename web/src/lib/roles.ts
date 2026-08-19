@@ -1,8 +1,11 @@
 /**
  * PromptPro — Clerk RBAC Role Helper
  *
- * Role is stored in Clerk metadata (publicMetadata, privateMetadata, or unsafeMetadata).
- * Default for any user without an explicit role is "user".
+ * Role is strictly derived from verified server-side Clerk metadata (publicMetadata or privateMetadata).
+ * Default for any user without an explicit admin role is "user".
+ *
+ * SECURITY:
+ * Never trust client-writable fields (e.g. unsafeMetadata, usernames, or emails).
  *
  * To grant admin: Clerk Dashboard → Users → [your account]
  *   → Metadata → Public metadata: { "role": "admin" }
@@ -13,55 +16,23 @@ import type { User } from "@clerk/nextjs/server";
 export type Role = "user" | "admin";
 
 /**
- * Reads the role from Clerk metadata and account attributes.
- * Accepts a partial User object so it can be used in both server components
- * and route handlers.
+ * Reads the role strictly from server-verified Clerk metadata.
+ * Accepts a User or session claims object containing publicMetadata or privateMetadata.
  */
 export function getRole(
-  user: Pick<User, "publicMetadata"> | any | null | undefined
+  user: { publicMetadata?: Record<string, unknown>; privateMetadata?: Record<string, unknown> } | null | undefined
 ): Role {
   if (!user) return "user";
 
-  // Check public metadata
-  if (user.publicMetadata?.role === "admin") return "admin";
-
-  // Check private metadata
-  if (user.privateMetadata?.role === "admin") return "admin";
-
-  // Check unsafe metadata
-  if (user.unsafeMetadata?.role === "admin") return "admin";
-
-  // Check username
-  const username = (user.username || "").toLowerCase();
-  if (username === "admin-ceo" || username.includes("admin") || username.includes("shreshtha")) return "admin";
-
-  // Check email addresses
-  if (Array.isArray(user.emailAddresses)) {
-    const hasAdminEmail = user.emailAddresses.some((e: any) => {
-      const email = (typeof e === "string" ? e : e?.emailAddress || "").toLowerCase();
-      return email.includes("shreshtha") || email.includes("admin");
-    });
-    if (hasAdminEmail) return "admin";
-  }
-
-  // Check primary email address if object or string
-  const primaryEmail = (
-    typeof user.primaryEmailAddress === "string"
-      ? user.primaryEmailAddress
-      : user.primaryEmailAddress?.emailAddress || ""
-  ).toLowerCase();
-
-  if (primaryEmail.includes("shreshtha") || primaryEmail.includes("admin")) {
+  // Check server-controlled public metadata (read-only for client, set via Clerk Dashboard/API)
+  if (user.publicMetadata && typeof user.publicMetadata === "object" && user.publicMetadata.role === "admin") {
     return "admin";
   }
 
-  // Check full JSON string for Clerk metadata
-  try {
-    const userStr = JSON.stringify(user).toLowerCase();
-    if (userStr.includes('"role":"admin"') || userStr.includes("admin-ceo") || userStr.includes("shreshtha")) {
-      return "admin";
-    }
-  } catch (e) {}
+  // Check server-only private metadata (never sent to client)
+  if (user.privateMetadata && typeof user.privateMetadata === "object" && user.privateMetadata.role === "admin") {
+    return "admin";
+  }
 
   return "user";
 }
