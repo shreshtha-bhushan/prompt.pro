@@ -1122,8 +1122,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const suggestionsPromise = generateSmartSuggestions(text, analysis);
 
     // Retrieve settings dynamically to handle OpenRouter API & preferences
-    chrome.storage.local.get(['settings'], (result) => {
+    chrome.storage.local.get(['settings', 'authSession'], (result) => {
       const settings = result.settings || {};
+      const session = result.authSession || {};
       const openrouterEnabled = !!settings.openrouterEnabled;
       const noFluff = settings.noFluff !== false;
       const lowTokenEnabled = !!settings.lowTokenEnabled;
@@ -1146,7 +1147,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         rewrittenPromise = fetch(apiUrl, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            ...(session.token ? { 'Authorization': `Bearer ${session.token}` } : {})
           },
           body: JSON.stringify({
             text: text,
