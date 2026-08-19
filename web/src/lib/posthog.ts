@@ -61,3 +61,7 @@ export function optInCapturing(): void {
     posthog.opt_in_capturing()
   }
 }
+
+export const optInPostHog = optInCapturing
+export const optOutPostHog = optOutCapturing
+

@@ -10,11 +10,14 @@ import { PostHogProvider as PHProvider, usePostHog } from "posthog-js/react"
 if (typeof window !== "undefined") {
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY
   if (key && key !== "phc_placeholder") {
+    const hasConsent = localStorage.getItem("promptpro_cookie_consent") === "accepted"
     posthog.init(key, {
       // Route through our /ingest proxy to bypass ad blockers
       api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || "/ingest",
       // Only create person profiles for identified (signed-in) users
       person_profiles: "identified_only",
+      // Strict Opt-In by Default (GDPR/ePrivacy compliant: zero telemetry until user accepts)
+      opt_out_capturing_by_default: !hasConsent,
       // We fire pageviews manually via PageviewTracker (App Router requires it)
       capture_pageview: false,
       capture_pageleave: true,

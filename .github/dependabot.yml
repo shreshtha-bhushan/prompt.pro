@@ -1,0 +1,34 @@
+version: 2
+updates:
+  # Next.js Dashboard Web Application
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "security"
+    groups:
+      radix-ui:
+        patterns:
+          - "@radix-ui/*"
+      dnd-kit:
+        patterns:
+          - "@dnd-kit/*"
+      upstash:
+        patterns:
+          - "@upstash/*"
+    ignore:
+      # Major framework updates require dedicated testing passes
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
