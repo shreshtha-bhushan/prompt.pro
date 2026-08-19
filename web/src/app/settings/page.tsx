@@ -1,7 +1,16 @@
+import type { Metadata } from 'next'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { MetaLabel } from '@/components/ui/MetaLabel'
 import { PageTransition } from '@/components/layout/PageTransition'
+
+export const metadata: Metadata = {
+  title: "Settings | PromptPro",
+  robots: {
+    index: false,
+    follow: false,
+  },
+}
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'

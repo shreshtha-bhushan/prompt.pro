@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { auth } from "@clerk/nextjs/server"
@@ -7,6 +8,16 @@ import { TopCommandBar } from "@/components/layout/TopCommandBar"
 import { HeatmapLoadingScreen } from "@/components/shared/HeatmapLoadingScreen"
 import { getEntitlement } from "@/lib/entitlement"
 import * as React from "react"
+
+export const metadata: Metadata = {
+  title: "Dashboard | PromptPro",
+  description:
+    "PromptPro workspace dashboard for real-time prompt engineering metrics, credit balances, and quick optimizations.",
+  robots: {
+    index: false,
+    follow: false,
+  },
+}
 
 export default async function DashboardLayout({
   children,

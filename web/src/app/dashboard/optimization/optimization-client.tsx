@@ -12,10 +12,14 @@ import {
   Wand2,
   ArrowRight,
   Terminal,
+  AlertCircle,
+  ShieldCheck,
+  RefreshCw,
 } from "lucide-react"
 import { PromptSparkleIcon } from "@/components/shared/PromptSparkleIcon"
 import { toast } from "sonner"
 import { ScorePill } from "@/components/shared/ScorePill"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const STRATEGIES = [
   {
@@ -60,6 +64,7 @@ export function OptimizationClient({
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [copied, setCopied] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [optError, setOptError] = useState<{ code?: string; message: string } | null>(null)
 
   const handleOptimize = async () => {
     if (!inputPrompt.trim()) {
@@ -69,6 +74,7 @@ export function OptimizationClient({
 
     setIsOptimizing(true)
     setOutputPrompt("")
+    setOptError(null)
 
     try {
       const res = await fetch("/api/upgrade", {
@@ -88,7 +94,17 @@ export function OptimizationClient({
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to optimize prompt")
+        const errCode = data.code || "UPGRADE_FAILED"
+        let friendlyMessage = data.error || "Failed to optimize prompt"
+        if (errCode === "RATE_LIMITED") {
+          friendlyMessage = "Too many requests. Please wait a moment before trying again."
+        } else if (errCode === "INSUFFICIENT_CREDITS") {
+          friendlyMessage = "You have used all available optimization credits for this billing period."
+        } else if (errCode === "UPGRADE_FAILED" || errCode === "AI_PROVIDER_ERROR") {
+          friendlyMessage = "The AI model provider was temporarily unreachable. Your credits were preserved."
+        }
+        setOptError({ code: errCode, message: friendlyMessage })
+        throw new Error(friendlyMessage)
       }
 
       setOutputPrompt(data.rewritten)
@@ -293,7 +309,73 @@ export function OptimizationClient({
               {outputPrompt && <ScorePill delta={34} />}
             </div>
 
-            {outputPrompt ? (
+            {isOptimizing ? (
+              /* Shimmer Loading Skeleton */
+              <div className="p-6 rounded-2xl bg-[#151515] border border-white/[0.06] min-h-[340px] space-y-4 animate-fade-up">
+                <div className="flex items-center gap-2 text-white/50 text-[12px] font-mono pb-2 border-b border-white/[0.04]">
+                  <PromptSparkleIcon size={14} className="animate-spin text-white/70" />
+                  <span>Decomposing &amp; Restructuring Prompt...</span>
+                </div>
+                <div className="space-y-3 pt-2">
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-3 w-28 bg-white/[0.06] rounded" />
+                    <Skeleton className="h-4 w-full bg-white/[0.04] rounded" />
+                    <Skeleton className="h-4 w-4/5 bg-white/[0.04] rounded" />
+                  </div>
+                  <div className="space-y-1.5 pt-2">
+                    <Skeleton className="h-3 w-36 bg-white/[0.06] rounded" />
+                    <Skeleton className="h-4 w-full bg-white/[0.04] rounded" />
+                    <Skeleton className="h-4 w-11/12 bg-white/[0.04] rounded" />
+                  </div>
+                  <div className="space-y-1.5 pt-2">
+                    <Skeleton className="h-3 w-32 bg-white/[0.06] rounded" />
+                    <Skeleton className="h-4 w-3/4 bg-white/[0.04] rounded" />
+                  </div>
+                </div>
+              </div>
+            ) : optError ? (
+              /* Inline Error & Credit Guarantee Card */
+              <div className="min-h-[340px] rounded-2xl border border-white/[0.08] bg-[#151515] p-6 flex flex-col justify-between animate-fade-up">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2.5 text-white/80">
+                    <div className="w-8 h-8 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-white/70">
+                      <AlertCircle className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-[14px] font-semibold text-white">
+                        Optimization Interrupted
+                      </h4>
+                      {optError.code && (
+                        <span className="text-[11px] font-mono text-white/40 uppercase">
+                          Code: {optError.code}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="text-[13px] text-white/60 leading-relaxed font-sans">
+                    {optError.message}
+                  </p>
+
+                  {/* Credit Refund Guarantee Badge */}
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center gap-2.5 text-[12px] font-mono text-white/80">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Zero credits consumed · Transaction safely refunded</span>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button
+                    type="button"
+                    onClick={handleOptimize}
+                    className="inline-flex items-center justify-center gap-2 h-[36px] px-5 rounded-xl bg-white text-[#111111] text-[12px] font-semibold hover:bg-white/90 transition-all"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Retry Optimization</span>
+                  </button>
+                </div>
+              </div>
+            ) : outputPrompt ? (
               <div className="p-5 rounded-2xl bg-[#151515] border border-white/[0.06] text-[13px] text-white/95 font-mono leading-relaxed min-h-[340px] whitespace-pre-wrap">
                 {outputPrompt}
               </div>

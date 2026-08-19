@@ -35,6 +35,8 @@ import {
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { PromptProIcon } from "@/components/shared/PromptProIcon"
+import { AnalyticsSkeleton } from "@/components/skeletons/AnalyticsSkeleton"
+import { InlineError } from "@/components/ui/InlineError"
 
 interface AnalyticsData {
   range: string
@@ -135,6 +137,11 @@ export function AnalyticsDashboard({ initialRange = "30d" }: { initialRange?: st
     fetchAnalytics(range)
   }, [range, fetchAnalytics])
 
+  // ── 0. Initial Loading Skeleton ──
+  if (loading && !data) {
+    return <AnalyticsSkeleton />
+  }
+
   // ── 1. Global Empty State (0 optimizations ever) ──
   if (!loading && data && data.totalLogsCount === 0) {
     return (
@@ -175,16 +182,12 @@ export function AnalyticsDashboard({ initialRange = "30d" }: { initialRange?: st
   // ── 2. Error State ──
   if (error && !loading) {
     return (
-      <div className="card p-12 border border-red-500/20 bg-red-500/[0.03] text-center max-w-md mx-auto my-12 rounded-2xl">
-        <h3 className="text-[18px] font-semibold text-white mb-2">Analytics couldn't load</h3>
-        <p className="text-[13px] text-white/50 mb-6">{error}</p>
-        <button
-          onClick={() => fetchAnalytics(range)}
-          className="inline-flex items-center gap-2 h-[36px] px-5 rounded-xl bg-white text-black text-[12px] font-medium hover:bg-white/90 transition-all"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Try Again</span>
-        </button>
+      <div className="space-y-6 pt-4 max-w-xl mx-auto">
+        <InlineError
+          title="Analytics temporarily unavailable"
+          message={error}
+          onRetry={() => fetchAnalytics(range)}
+        />
       </div>
     )
   }

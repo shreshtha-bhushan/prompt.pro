@@ -14,11 +14,18 @@
  * navigates here with the tier/period already resolved.
  */
 
+import type { Metadata } from "next";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { CheckoutEmbed } from "@/components/CheckoutEmbed";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Upgrade Plan — PromptPro Plus & Max",
+  description:
+    "Upgrade your PromptPro workspace with Plus or Max plans to unlock deep reasoning prompt modes and expanded monthly credit limits.",
+};
 
 export default async function UpgradePage({
   searchParams,

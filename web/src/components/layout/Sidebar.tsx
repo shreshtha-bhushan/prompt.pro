@@ -160,7 +160,7 @@ export function Sidebar() {
             }}
           >
             <Avatar className="w-7 h-7 flex-shrink-0">
-              <AvatarImage src="/avatar.png" />
+              <AvatarImage src="/avatar.png" alt="User account avatar" />
               <AvatarFallback style={{
                 background: 'rgba(255,255,255,0.08)',
                 color: 'rgba(255,255,255,0.6)',

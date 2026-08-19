@@ -1,8 +1,15 @@
+import type { Metadata } from 'next'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { PageTransition } from '@/components/layout/PageTransition'
 import { Separator } from '@/components/ui/separator'
 import { ShieldCheck, Zap, Lock, ExternalLink, MessageSquare } from 'lucide-react'
+
+export const metadata: Metadata = {
+  title: 'About PromptPro — Modern AI Prompt Architecture',
+  description:
+    'Discover how PromptPro streamlines prompt engineering with zero-fluff frameworks, isolated user workspaces, and multi-model AI optimizations.',
+}
 
 function FeatureRow({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) {
   return (
@@ -88,7 +95,7 @@ export default function AboutPage() {
                 <FeatureRow
                   icon={<Lock size={16} />}
                   title="Privacy First"
-                  description="Upgrades run locally on your browser. Your prompts are never used for training."
+                  description="Engineered for privacy. Built with zero prompt retention and AI training opt-out configurations."
                 />
               </div>
             </GlassCard>

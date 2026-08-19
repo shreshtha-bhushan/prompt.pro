@@ -33,6 +33,7 @@ import {
 import { PromptSparkleIcon } from "@/components/shared/PromptSparkleIcon"
 import { ScorePill } from "@/components/shared/ScorePill"
 import { ModelIcon } from "@/components/shared/ModelIcon"
+import { HistorySkeleton } from "@/components/skeletons/HistorySkeleton"
 import {
   Sheet,
   SheetContent,
@@ -650,11 +651,7 @@ export function HistoryClient({
       </div>
 
       {loading ? (
-        <div className="space-y-4">
-          <div className="h-20 rounded-2xl bg-white/[0.03] animate-pulse" />
-          <div className="h-20 rounded-2xl bg-white/[0.03] animate-pulse" />
-          <div className="h-20 rounded-2xl bg-white/[0.03] animate-pulse" />
-        </div>
+        <HistorySkeleton />
       ) : groupedLogs.length === 0 ? (
         /* Apple-Grade Empty State */
         <div className="card p-14 border border-white/[0.06] bg-[#1A1A1C] text-center max-w-lg mx-auto">

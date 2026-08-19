@@ -1,8 +1,17 @@
+import type { Metadata } from 'next'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { MetaLabel } from '@/components/ui/MetaLabel'
 import { BigNumber } from '@/components/ui/BigNumber'
 import { PageTransition } from '@/components/layout/PageTransition'
+
+export const metadata: Metadata = {
+  title: "Optimization | PromptPro",
+  robots: {
+    index: false,
+    follow: false,
+  },
+}
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 

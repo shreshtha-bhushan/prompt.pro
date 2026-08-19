@@ -13,6 +13,7 @@ import {
   FolderOpen,
 } from "lucide-react"
 import { PromptSparkleIcon } from "@/components/shared/PromptSparkleIcon"
+import { LibrarySkeleton } from "@/components/skeletons/LibrarySkeleton"
 import {
   Dialog,
   DialogContent,
@@ -384,11 +385,7 @@ export function LibraryClient({
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          <div className="h-48 rounded-2xl bg-white/[0.03] animate-pulse" />
-          <div className="h-48 rounded-2xl bg-white/[0.03] animate-pulse" />
-          <div className="h-48 rounded-2xl bg-white/[0.03] animate-pulse" />
-        </div>
+        <LibrarySkeleton />
       ) : filteredSnippets.length === 0 ? (
         /* Apple-Grade Empty State */
         <div className="card p-14 border border-white/[0.06] bg-[#1A1A1C] text-center max-w-lg mx-auto">

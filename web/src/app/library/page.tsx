@@ -1,7 +1,16 @@
+import type { Metadata } from 'next'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { MetaLabel } from '@/components/ui/MetaLabel'
 import { PageTransition } from '@/components/layout/PageTransition'
+
+export const metadata: Metadata = {
+  title: "Library | PromptPro",
+  robots: {
+    index: false,
+    follow: false,
+  },
+}
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

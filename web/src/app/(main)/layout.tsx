@@ -4,7 +4,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   return (
     <>
       {/* Deep canvas */}
-      <div className="fixed inset-0 z-0" style={{ background: '#050505' }} />
+      <div className="fixed inset-0 z-0" style={{ background: 'var(--layer-0)' }} />
 
       {/* Ambient gradient */}
       <div

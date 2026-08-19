@@ -1,18 +1,23 @@
+import type { Metadata } from "next"
 import { SignIn } from "@clerk/nextjs"
-import { SupportPageShell } from "@/components/support/SupportPageShell"
-import { promptProClerkAppearance } from "@/lib/clerk-theme"
+import { AuthLayout } from "@/components/auth/AuthLayout"
+import { clerkAppearance } from "@/lib/clerk-appearance"
+
+export const metadata: Metadata = {
+  title: "Sign In",
+  description:
+    "Log in to your PromptPro workspace to access your prompt library, optimization history, and credit usage analytics.",
+}
 
 export default function LoginPage() {
   return (
-    <SupportPageShell backHref="/" backLabel="Home">
-      <div className="w-full max-w-[440px] flex flex-col items-center">
-        <SignIn
-          appearance={promptProClerkAppearance}
-          routing="path"
-          path="/login"
-          signUpUrl="/sign-up"
-        />
-      </div>
-    </SupportPageShell>
+    <AuthLayout backHref="/" backLabel="Home">
+      <SignIn
+        appearance={clerkAppearance}
+        routing="path"
+        path="/login"
+        signUpUrl="/sign-up"
+      />
+    </AuthLayout>
   )
 }

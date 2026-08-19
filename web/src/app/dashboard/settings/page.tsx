@@ -1,6 +1,17 @@
+import type { Metadata } from "next"
 import { auth } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
 import { SettingsClient } from "./settings-client"
+
+export const metadata: Metadata = {
+  title: "Account Settings | PromptPro",
+  description:
+    "Manage your PromptPro profile preferences, Chrome extension integration tokens, and workspace defaults.",
+  robots: {
+    index: false,
+    follow: false,
+  },
+}
 
 export default async function SettingsPage() {
   const { userId, getToken } = await auth()

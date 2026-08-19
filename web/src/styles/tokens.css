@@ -119,6 +119,61 @@
   --meter-fill-low: #f59e0b;
   --meter-height: 4px;
   --meter-radius: 2px;
+
+  /* ── AUTH SCOPED DESIGN TOKENS (Pure White / Silver Monochrome) ── */
+  --zinc-950:             #09090b;                             /* page base */
+  --auth-bg:              var(--zinc-950);
+  --auth-accent-start:    #FFFFFF;                             /* pure white */
+  --auth-accent-end:      #E4E4E7;                             /* zinc-200 / pure silver */
+  --auth-accent-gradient: linear-gradient(180deg, #FFFFFF 0%, #E4E4E7 100%);
+  --auth-glow-opacity:    0.12;
+  --auth-card-bg:         rgba(24, 24, 27, 0.65);              /* zinc-900 @ 65% */
+  --auth-card-border:     rgba(255, 255, 255, 0.08);
+  --auth-radius-card:     24px;
+  --auth-radius-input:    12px;
+  --auth-radius-button:   12px;
+}
+
+/* ── AUTH AMBIENT GLOW & GLASS CARD (2-Blur Budget) ──────── */
+.auth-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 540px;
+  height: 540px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.25) 0%,
+    rgba(228, 228, 231, 0.10) 35%,
+    transparent 70%
+  );
+  opacity: var(--auth-glow-opacity);
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+  animation: authGlowDrift 12s ease-in-out infinite alternate;
+}
+
+@keyframes authGlowDrift {
+  0% {
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  50% {
+    transform: translate(-48%, -52%) scale(1.05);
+  }
+  100% {
+    transform: translate(-52%, -48%) scale(0.98);
+  }
+}
+
+.auth-card {
+  background: var(--auth-card-bg) !important;
+  border: 1px solid var(--auth-card-border) !important;
+  border-radius: var(--auth-radius-card) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
 }
 
 /* ── REDUCED MOTION ───────────────────────────────────────── */
@@ -126,5 +181,8 @@
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+  .auth-glow {
+    animation: none !important;
   }
 }

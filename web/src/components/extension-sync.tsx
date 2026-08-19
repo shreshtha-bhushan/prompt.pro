@@ -12,7 +12,7 @@ export function ExtensionSync() {
     if (!isAuthLoaded || !isUserLoaded) return;
 
     if (!user) {
-      window.postMessage({ type: "PROMPT_PRO_SYNC_SIGNOUT" }, "*")
+      window.postMessage({ type: "PROMPT_PRO_SYNC_SIGNOUT" }, window.location.origin)
       return
     }
 
@@ -34,7 +34,7 @@ export function ExtensionSync() {
                 role: (user.publicMetadata as any)?.role || ""
               }
             }
-          }, "*")
+          }, window.location.origin)
         }
       } catch (err) {
         console.error("Failed to sync extension token", err)

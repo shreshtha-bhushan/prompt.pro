@@ -1,7 +1,16 @@
+import type { Metadata } from 'next'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { GlassCard } from '@/components/ui/GlassCard'
 import { MetaLabel } from '@/components/ui/MetaLabel'
 import { PageTransition } from '@/components/layout/PageTransition'
+
+export const metadata: Metadata = {
+  title: "History | PromptPro",
+  robots: {
+    index: false,
+    follow: false,
+  },
+}
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
