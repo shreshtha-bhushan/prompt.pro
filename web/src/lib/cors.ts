@@ -28,7 +28,7 @@ export function getCorsHeaders(request?: Request): Record<string, string> {
   const isAllowedExtension = origin.startsWith("chrome-extension://");
   const isLocalhost = origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:");
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://prompt-pro-liart.vercel.app";
-  const isAppDomain = origin === appUrl || origin.endsWith(".vercel.app");
+  const isAppDomain = origin === appUrl;
 
   if (isAllowedExtension || isLocalhost || isAppDomain) {
     return {
