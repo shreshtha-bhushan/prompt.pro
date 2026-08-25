@@ -8,16 +8,13 @@
  * Access: admin role only (enforced in admin/layout.tsx)
  */
 
-import { createClient } from "@supabase/supabase-js";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { AdminTable } from "@/components/admin/AdminTable";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabase = getAdminClient();
 
   const { data: profiles, error } = await supabase
     .from("profiles")

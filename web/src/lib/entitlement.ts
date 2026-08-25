@@ -9,7 +9,7 @@
  */
 
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAdminClient } from "./supabase/admin";
 import { PLAN_LIMITS, type PlanTier, type OptimizationMode } from "./plans";
 import { getRole } from "./roles";
 
@@ -43,10 +43,7 @@ export async function getEntitlement(): Promise<EntitlementSnapshot | null> {
   await ensureProfile(userId).catch(() => {});
 
   // Service-role client — bypasses RLS, safe for server-only use
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabase = getAdminClient();
 
   const { data } = await supabase
     .from("profiles")
@@ -77,10 +74,7 @@ export async function getEntitlement(): Promise<EntitlementSnapshot | null> {
  */
 export async function ensureProfile(userId: string): Promise<void> {
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabase = getAdminClient();
 
     const { data: existing } = await supabase
       .from("profiles")

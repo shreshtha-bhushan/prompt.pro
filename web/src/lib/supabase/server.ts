@@ -7,9 +7,12 @@ export async function createClient() {
   // The template name must match the one you create in Clerk Dashboard -> Integrations -> Supabase
   const supabaseAccessToken = await getToken({ template: 'supabase' })
 
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
+
   return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     {
       global: {
         headers: supabaseAccessToken ? { Authorization: `Bearer ${supabaseAccessToken}` } : undefined,

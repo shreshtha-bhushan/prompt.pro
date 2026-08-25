@@ -8,11 +8,13 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { PLAN_LIMITS, type PlanTier, type OptimizationMode } from "@/lib/plans";
 import { ensureProfile } from "@/lib/entitlement";
 import { getRole } from "@/lib/roles";
 import { getCorsHeaders, handleOptions } from "@/lib/cors";
+
+export const dynamic = "force-dynamic";
 
 export async function OPTIONS(request: NextRequest) {
   return handleOptions(request);
@@ -43,10 +45,7 @@ export async function GET(request: NextRequest) {
 
   let data: { plan_tier?: string; credits_balance?: number; credits_reset_at?: string | null; plan_status?: string; whop_customer_id?: string | null } | null = null;
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabase = getAdminClient();
 
     const { data: profile } = await supabase
       .from("profiles")

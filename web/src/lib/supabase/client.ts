@@ -20,9 +20,12 @@ export function createClerkSupabaseClient(clerkToken: string | null): SupabaseCl
   }
 
   _cachedToken = clerkToken
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
+
   _cachedClient = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     {
       global: {
         headers: clerkToken ? { Authorization: `Bearer ${clerkToken}` } : undefined,

@@ -1,5 +1,5 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { PLAN_CONFIG, type PlanTier, CREDIT_COSTS, type OptimizationMode } from "@/lib/plans";
 import { getRole } from "@/lib/roles";
 
@@ -68,10 +68,7 @@ export async function GET(request: Request) {
   const range = searchParams.get("range") || "30d";
   const { days, currentStart, currentEnd, prevStart, prevEnd } = calculateDateRange(range);
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabase = getAdminClient();
 
   // Check admin role
   let isAdmin = false;

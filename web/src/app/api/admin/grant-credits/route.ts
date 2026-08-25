@@ -14,16 +14,13 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { getRole } from "@/lib/roles";
 import { rateLimit, buildRateLimitResponse } from "@/lib/ratelimit";
 import { adminGrantCreditsSchema } from "@/lib/validations/api";
 import { getCorsHeaders, handleOptions } from "@/lib/cors";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export const dynamic = "force-dynamic";
 
 export async function OPTIONS(request: NextRequest) {
   return handleOptions(request);
@@ -90,6 +87,7 @@ export async function POST(request: NextRequest) {
   const { profileId, amount } = parseResult.data;
 
   // ── 5. Transactional Credit Grant RPC ─────────────────────
+  const supabase = getAdminClient();
   const { data: newBalance, error } = await supabase.rpc("spend_credits", {
     p_clerk_id: profileId,
     p_amount: -amount, // negative delta = grant addition

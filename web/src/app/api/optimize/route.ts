@@ -17,7 +17,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAdminClient } from "@/lib/supabase/admin";
 import {
   CREDIT_COSTS,
   canUseMode,
@@ -31,11 +31,7 @@ import { rateLimit, buildRateLimitResponse } from "@/lib/ratelimit";
 import { optimizeSchema } from "@/lib/validations/api";
 import { getCorsHeaders, handleOptions } from "@/lib/cors";
 
-// Service-role client for atomic billing and entitlement operations
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export const dynamic = "force-dynamic";
 
 const REASON_BY_MODE: Record<
   OptimizationMode,
@@ -106,6 +102,7 @@ export async function POST(request: NextRequest) {
   // ── 5. Profile Fetch & Tier Verification ──────────────────
   await ensureProfile(userId);
 
+  const supabase = getAdminClient();
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
     .select("plan_tier, credits_balance, whop_customer_id")

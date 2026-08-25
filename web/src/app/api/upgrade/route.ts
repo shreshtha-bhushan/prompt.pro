@@ -16,7 +16,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAdminClient } from "@/lib/supabase/admin";
 import {
   CREDIT_COSTS,
   canUseMode,
@@ -29,10 +29,7 @@ import { rateLimit, buildRateLimitResponse } from "@/lib/ratelimit";
 import { upgradeSchema } from "@/lib/validations/api";
 import { getCorsHeaders, handleOptions } from "@/lib/cors";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export const dynamic = "force-dynamic";
 
 function mapStrategyToMode(strategy?: string, requestedMode?: OptimizationMode): OptimizationMode {
   if (requestedMode && ["quick", "advanced", "max"].includes(requestedMode)) {
@@ -104,6 +101,7 @@ export async function POST(request: NextRequest) {
   // ── 5. Profile & Tier Entitlement Check ───────────────────
   await ensureProfile(userId);
 
+  const supabase = getAdminClient();
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
     .select("plan_tier, credits_balance")

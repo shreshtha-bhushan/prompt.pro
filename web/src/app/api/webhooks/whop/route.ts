@@ -12,17 +12,12 @@
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { posthogServer, shutdownPosthog } from "@/lib/posthog-server";
 import { rateLimit } from "@/lib/ratelimit";
 import crypto from "node:crypto";
 
 export const dynamic = "force-dynamic";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 function buildPlanMap(): Record<
   string,
@@ -161,6 +156,7 @@ export async function POST(request: NextRequest) {
   const eventId = getDeterministicEventId(request.headers, eventType, data);
 
   // ── 3. Idempotency Verification ───────────────────────────
+  const supabase = getAdminClient();
   const { data: existing } = await supabase
     .from("whop_webhook_events")
     .select("id")

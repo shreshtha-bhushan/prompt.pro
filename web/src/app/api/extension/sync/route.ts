@@ -18,10 +18,15 @@ import { rateLimit, buildRateLimitResponse } from "@/lib/ratelimit";
 import { syncActionSchema } from "@/lib/validations/api";
 import { getCorsHeaders, handleOptions } from "@/lib/cors";
 
+export const dynamic = "force-dynamic";
+
 function createSupabaseClient(clerkToken: string | null) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
+
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     {
       global: {
         headers: clerkToken ? { Authorization: `Bearer ${clerkToken}` } : undefined,
