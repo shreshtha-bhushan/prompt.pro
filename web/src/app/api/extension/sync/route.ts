@@ -12,28 +12,13 @@
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
+import { resolveAuthUserId } from "@/lib/auth-resolver";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { rateLimit, buildRateLimitResponse } from "@/lib/ratelimit";
 import { syncActionSchema } from "@/lib/validations/api";
 import { getCorsHeaders, handleOptions } from "@/lib/cors";
 
 export const dynamic = "force-dynamic";
-
-function createSupabaseClient(clerkToken: string | null) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
-
-  return createClient(
-    url,
-    anonKey,
-    {
-      global: {
-        headers: clerkToken ? { Authorization: `Bearer ${clerkToken}` } : undefined,
-      },
-    }
-  );
-}
 
 export async function OPTIONS(request: NextRequest) {
   return handleOptions(request);
@@ -43,7 +28,7 @@ export async function GET(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request);
 
   try {
-    const { userId, getToken } = await auth();
+    const userId = await resolveAuthUserId(request);
     if (!userId) {
       return NextResponse.json(
         { error: "unauthorized", code: "AUTH_REQUIRED" },
@@ -56,8 +41,7 @@ export async function GET(request: NextRequest) {
       return buildRateLimitResponse(rateLimitResult, corsHeaders);
     }
 
-    const supabaseToken = await getToken({ template: "supabase" });
-    const supabase = createSupabaseClient(supabaseToken);
+    const supabase = getAdminClient();
 
     // 1. Fetch recent optimization history
     const { data: logs, error: logsError } = await supabase
@@ -131,7 +115,7 @@ export async function POST(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request);
 
   try {
-    const { userId, getToken } = await auth();
+    const userId = await resolveAuthUserId(request);
     if (!userId) {
       return NextResponse.json(
         { error: "unauthorized", code: "AUTH_REQUIRED" },
@@ -167,8 +151,7 @@ export async function POST(request: NextRequest) {
     }
 
     const actionData = parseResult.data;
-    const supabaseToken = await getToken({ template: "supabase" });
-    const supabase = createSupabaseClient(supabaseToken);
+    const supabase = getAdminClient();
 
     // ── Bulk Merge Action ─────────────────────────────────────
     if (actionData.action === "bulkMerge") {

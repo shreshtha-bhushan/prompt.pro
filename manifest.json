@@ -23,8 +23,10 @@
     },
     {
       "matches": [
-        "http://localhost:3000/*",
-        "https://prompt-pro-liart.vercel.app/*"
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://prompt-pro-liart.vercel.app/*",
+        "https://*.vercel.app/*"
       ],
       "js": ["content/auth-sync.js"],
       "run_at": "document_idle"
@@ -45,12 +47,29 @@
     "https://gemini.google.com/*",
     "https://*.perplexity.ai/*",
     "https://prompt-pro-liart.vercel.app/*",
-    "http://localhost:3000/*",
+    "https://*.vercel.app/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
     "https://verified-dolphin-8.clerk.accounts.dev/*"
   ],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "styles/injected.css",
+        "icons/*"
+      ],
+      "matches": [
+        "https://chat.openai.com/*",
+        "https://chatgpt.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://*.perplexity.ai/*"
+      ]
+    }
+  ]
 }

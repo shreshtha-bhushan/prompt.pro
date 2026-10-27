@@ -19,8 +19,7 @@
     noFluff: false,
     lowTokenEnabled: false,
     siteMemory: true,
-    openrouterEnabled: false,
-    openrouterApiKey: '',
+    openrouterEnabled: true,
     openrouterModel: 'anthropic/claude-3.5-sonnet',
     customModel: '',
     autocompleteEnabled: true
@@ -222,14 +221,12 @@
     const headers = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${authSession.token}`,
+      ...(authSession.user?.id ? { 'x-promptpro-user-id': authSession.user.id } : {}),
       ...(options.headers || {})
     };
     try {
       const resp = await fetch(`${API_BASE}${path}`, { ...options, headers });
       if (!resp.ok) {
-        if (resp.status === 401) {
-          authSession = null;
-        }
         return null;
       }
       return await resp.json();

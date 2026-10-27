@@ -35,6 +35,7 @@ out/
 web/out/
 build/
 web/build/
+*.tsbuildinfo
 
 # Vercel & Cloudflare
 .vercel/

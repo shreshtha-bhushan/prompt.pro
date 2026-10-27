@@ -1,15 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap');
-
 /* ═══════════════════════════════════════════════════════
    PromptPro — Injected Styles (Phase 2: Apple-Level UI)
    
-   Premium glassmorphism, black/grey/white motif, 
+   Premium glassmorphism, monotone black/grey/white motif, 
    smooth momentum animations.
    ═══════════════════════════════════════════════════════ */
 
 :root {
-  --pp-font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
-  --pp-font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Roboto Mono, monospace;
+  --pp-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --pp-font-mono: ui-monospace, SFMono-Regular, 'Cascadia Code', 'Roboto Mono', Menlo, monospace;
 }
 
 /* ── Container ──────────────────────────────────────── */
@@ -28,15 +26,39 @@
   contain: layout style;
 }
 
-/* ChatGPT: stay in normal flow — extreme z-index + isolation caused stacking over the Send control */
+/* ChatGPT: stay in normal flow — sit between Dictate and Send */
 .promptpro-container.promptpro-container--chatgpt {
   z-index: 3;
   position: relative;
   isolation: auto;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  flex-shrink: 0;
 }
 
-.promptpro-container--chatgpt > .promptpro-btn {
-  margin-right: 10px;
+.promptpro-container.promptpro-container--chatgpt {
+  z-index: 3;
+  position: relative;
+  isolation: auto;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  flex-shrink: 0;
+  margin: 0 4px;
+}
+
+/* Claude: sit beside the send button in the bottom action bar */
+.promptpro-container.promptpro-container--claude {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  z-index: 3;
+  position: relative;
+  isolation: auto;
+  margin: 0 4px;
+  flex-shrink: 0;
+  vertical-align: middle;
 }
 
 /* Gemini: sit beside the send button in the horizontal trailing-actions row */
@@ -47,86 +69,111 @@
   z-index: 3;
   position: relative;
   isolation: auto;
-  margin-right: 4px;
+  margin: 0 4px;
   flex-shrink: 0;
   vertical-align: middle;
 }
 
-.promptpro-container--gemini > .promptpro-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  margin-right: 0;
-  background: rgba(30, 30, 35, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+/* Perplexity: sit beside search/submit button */
+.promptpro-container.promptpro-container--perplexity {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  z-index: 3;
+  position: relative;
+  isolation: auto;
+  margin: 0 4px;
+  flex-shrink: 0;
+  vertical-align: middle;
 }
 
-.promptpro-container--gemini > .promptpro-btn:hover {
-  background: rgba(60, 60, 70, 0.6);
-}
-
-/* ── Inline Upgrade Button ──────────────────────────── */
+/* ── Inline Upgrade Button (Greyish Circular Outline Button) ─────────────── */
 
 .promptpro-btn {
   all: unset;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  margin-right: 4px;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 auto !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  max-width: 32px !important;
+  max-height: 32px !important;
+  padding: 0 !important;
+  margin: 0 !important;
   
-  /* Glassmorphism base */
-  background: rgba(30, 30, 35, 0.4);
+  /* Greyish circular outline button */
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
   backdrop-filter: blur(12px) saturate(150%);
   -webkit-backdrop-filter: blur(12px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
   
-  color: #f1f5f9;
-  font-size: 13px;
-  font-weight: 600;
-  font-family: var(--pp-font-sans);
-  cursor: pointer;
-  white-space: nowrap;
-  line-height: 1;
+  color: #d1d5db !important;
+  cursor: pointer !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25) !important;
+  transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+  line-height: 1 !important;
   user-select: none;
   -webkit-user-select: none;
-  
-  /* Ambient Shadow + Out-Sine Transition */
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  transition: all 150ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .promptpro-btn:hover {
-  background: rgba(60, 60, 70, 0.7);
-  transform: scale(1.04);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.38) !important;
+  color: #ffffff !important;
+  transform: scale(1.05) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.15) !important;
 }
 
 .promptpro-btn:active {
-  transform: scale(0.94);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  transform: scale(0.95) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
 }
 
 .promptpro-btn--active-lock {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3) !important;
 }
 
 .promptpro-btn__icon {
-  font-size: 15px;
-  filter: grayscale(100%) brightness(200%);
-  transition: all 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 20px !important;
+  height: 20px !important;
+  color: inherit !important;
+  transition: transform 200ms ease, color 150ms ease;
+}
+
+.promptpro-btn__icon svg {
+  width: 20px !important;
+  height: 20px !important;
+  display: block !important;
 }
 
 .promptpro-btn:hover .promptpro-btn__icon {
-  filter: grayscale(100%) brightness(250%) drop-shadow(0 0 6px rgba(255, 255, 255, 0.8));
   transform: scale(1.15) rotate(5deg);
+}
+
+html.light .promptpro-btn,
+html[data-theme="light"] .promptpro-btn,
+[data-color-mode="light"] .promptpro-btn {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.18) !important;
+  color: #374151 !important;
+}
+html.light .promptpro-btn:hover,
+html[data-theme="light"] .promptpro-btn:hover,
+[data-color-mode="light"] .promptpro-btn:hover {
+  background: rgba(0, 0, 0, 0.1) !important;
+  border-color: rgba(0, 0, 0, 0.35) !important;
+  color: #111827 !important;
 }
 
 .promptpro-btn__spinner {
@@ -151,21 +198,22 @@
   position: absolute;
   bottom: calc(100% + 12px);
   right: 0;
-  width: 360px;
-  max-width: min(360px, calc(100vw - 24px));
+  width: 380px;
+  max-width: min(380px, calc(100vw - 24px));
   z-index: 2147483600;
   
   /* Deep Premium Glass */
-  background: rgba(24, 24, 28, 0.8);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(20, 20, 26, 0.85);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 16px;
   padding: 16px;
   
-  /* Heavy diffuse shadow for deep layering */
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6), 
-              inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  /* Heavy diffuse shadow + specular ring for deep glass layering */
+  box-shadow: 0 24px 50px -10px rgba(0, 0, 0, 0.65), 
+              0 0 0 1px rgba(255, 255, 255, 0.05),
+              inset 0 1px 1px rgba(255, 255, 255, 0.15);
   
   /* Hidden State */
   opacity: 0;
@@ -185,14 +233,14 @@
   transform: translateY(0) scale(1);
 }
 
-/* Portaled to document.body on ChatGPT — escapes overflow:hidden / transforms on composer */
+/* Portaled to document.body on ChatGPT / Claude — escapes overflow:hidden */
 .promptpro-popover.promptpro-popover--portal {
   position: fixed !important;
   margin: 0;
   transform: none !important;
   transform-origin: bottom right;
-  max-height: min(70vh, 520px);
-  overflow: hidden;
+  max-height: min(85vh, 560px);
+  overflow: visible;
   display: flex;
   flex-direction: column;
 }
@@ -202,27 +250,33 @@
 }
 
 .promptpro-popover--portal .promptpro-preview {
-  flex: 1 1 auto;
-  min-height: 120px;
-  max-height: 38vh;
+  flex: 0 1 auto;
+  min-height: 70px;
+  max-height: 160px;
 }
 
 /* ── Popover Header & Score Ring ────────────────────── */
 
 .promptpro-popover__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 12px !important;
+  gap: 8px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .promptpro-popover__title {
-  display: flex;
-  align-items: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: #ffffff;
-  letter-spacing: -0.01em;
+  display: inline-flex !important;
+  align-items: center !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #ffffff !important;
+  letter-spacing: -0.01em !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  user-select: none !important;
 }
 
 .promptpro-library-btn {
@@ -238,28 +292,54 @@
   transform: scale(1.15);
 }
 
+.promptpro-header-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-shrink: 0 !important;
+  margin-left: auto !important;
+}
+
+.promptpro-word-count {
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  color: #94a3b8 !important;
+  font-family: var(--pp-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace) !important;
+  letter-spacing: -0.01em !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
 .promptpro-score-container {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
 }
 
 .promptpro-score-deltas {
-  font-size: 12px;
-  font-weight: 600;
-  color: #94a3b8;
-  font-family: var(--pp-font-mono);
-  letter-spacing: -0.01em;
-  white-space: nowrap;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #4ade80 !important;
+  background: rgba(74, 222, 128, 0.12) !important;
+  border: 1px solid rgba(74, 222, 128, 0.25) !important;
+  border-radius: 999px !important;
+  padding: 1px 6px !important;
+  font-family: var(--pp-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace) !important;
+  letter-spacing: -0.01em !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  line-height: 1.3 !important;
 }
 
 .promptpro-score-progress {
-  width: 92px;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  width: 48px !important;
+  height: 5px !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  overflow: hidden !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+  flex-shrink: 0 !important;
 }
 
 .promptpro-score-progress__fill {
@@ -289,22 +369,34 @@
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
 }
 
-/* ── Preview Pane ───────────────────────────────────── */
+/* ── Preview Pane / Editor ───────────────────────────── */
 
 .promptpro-preview {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 8px;
-  padding: 16px;
-  font-size: 13px;
-  line-height: 1.6;
-  height: 160px;
-  overflow-y: auto;
-  margin-bottom: 16px;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
-  color: rgba(255, 255, 255, 0.7);
-  white-space: pre-wrap;
-  transition: opacity 150ms ease;
+  background: rgba(0, 0, 0, 0.45) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
+  font-size: 13.5px !important;
+  line-height: 1.6 !important;
+  min-height: 110px !important;
+  max-height: 200px !important;
+  overflow-y: auto !important;
+  margin-bottom: 4px !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25) !important;
+  color: #ffffff !important;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif !important;
+  transition: border-color 150ms ease, box-shadow 150ms ease !important;
 }
+
+.promptpro-preview:focus {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.15) !important;
+}
+
 
 /* WebKit Scrollbar inside Preview */
 .promptpro-preview::-webkit-scrollbar { width: 6px; }
@@ -316,251 +408,446 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.5;
+  opacity: 0.7;
+  color: #e2e8f0 !important;
 }
 
 .promptpro-preview__addition {
-  background: rgba(46, 160, 67, 0.12);
-  color: #56d364;
-  padding: 0 2px;
-  border-radius: 3px;
+  background: rgba(46, 160, 67, 0.18) !important;
+  color: #4ade80 !important;
+  padding: 1px 3px !important;
+  border-radius: 3px !important;
 }
 
 .promptpro-preview__original {
-  color: rgba(255, 255, 255, 0.9);
+  color: #ffffff !important;
 }
 
 /* ── Tone Selector ──────────────────────────────────── */
 
 .promptpro-section-title {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.4);
+  color: #94a3b8 !important;
+  margin-top: 14px;
   margin-bottom: 8px;
 }
 
 .promptpro-tone-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-width: 0;
+  margin-bottom: 4px;
+  width: 100%;
 }
 
 .promptpro-dropdown {
   position: relative;
   outline: none;
-  margin-bottom: 16px;
   width: 100%;
-  min-width: 0;
-  z-index: 2;
+  z-index: 20;
 }
+
 .promptpro-dropdown__trigger {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  padding: 12px 16px;
+  background: #1c1c1e !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  color: #ffffff !important;
+  transition: all 0.2s cubic-bezier(0.25, 0, 0.2, 1);
+  user-select: none;
+  box-sizing: border-box;
 }
-.promptpro-dropdown:hover .promptpro-dropdown__trigger {
-  background: rgba(255, 255, 255, 0.1);
+
+.promptpro-dropdown:hover .promptpro-dropdown__trigger,
+.promptpro-dropdown--open .promptpro-dropdown__trigger {
+  background: #28282c !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
 }
-.promptpro-dropdown--open .promptpro-dropdown__trigger svg {
+
+.promptpro-dropdown__value {
+  color: #ffffff !important;
+  font-weight: 500;
+}
+
+.promptpro-dropdown__chevron {
+  color: rgba(255, 255, 255, 0.5);
+  transition: transform 0.25s ease;
+  display: flex;
+  align-items: center;
+}
+
+.promptpro-dropdown--open .promptpro-dropdown__chevron {
   transform: rotate(180deg);
-}
-.promptpro-dropdown__trigger svg {
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.1);
-  opacity: 0.5;
 }
 
 .promptpro-dropdown__menu {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
-  max-height: 220px;
+  max-height: 190px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: rgba(30, 30, 35, 0.95);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  background: #1c1c1e !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 12px !important;
   padding: 6px;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-6px);
-  transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.1);
-  z-index: 2147483640;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: none;
+  z-index: 2147483647;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  box-sizing: border-box;
 }
 
 .promptpro-dropdown--open .promptpro-dropdown__menu {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
+  display: block;
+}
+
+.promptpro-dropdown__menu::-webkit-scrollbar {
+  width: 4px;
+}
+.promptpro-dropdown__menu::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
 }
 
 .promptpro-dropdown__item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  border-radius: 6px;
+  padding: 9px 12px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.6);
+  color: #cbd5e1 !important;
   transition: background 0.15s, color 0.15s;
 }
 
 .promptpro-dropdown__item:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
 }
+
+.promptpro-dropdown__item--active {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  font-weight: 600;
+}
+
 .promptpro-dropdown__check {
   display: none;
+  color: #ffffff !important;
 }
-.promptpro-dropdown__item--active {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.05);
-}
+
 .promptpro-dropdown__item--active .promptpro-dropdown__check {
   display: block;
 }
 
-/* ── Smart Suggestions (Phase 3) ────────────────────── */
+/* ── Change Summary & Diff View ─────────────────────── */
+
+.promptpro-change-summary {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+  transition: all 180ms ease;
+}
+
+.promptpro-change-summary__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.promptpro-change-summary__left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.promptpro-change-summary__title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.promptpro-change-summary__badge {
+  font-size: 10px;
+  font-weight: 500;
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.12);
+  border: 1px solid rgba(192, 132, 252, 0.25);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+
+.promptpro-diff-toggle-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #cbd5e1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 150ms ease;
+  outline: none;
+}
+
+.promptpro-diff-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.promptpro-change-summary__text {
+  font-size: 12px;
+  color: #f1f5f9;
+  line-height: 1.45;
+  font-weight: 450;
+}
+
+/* ── Contextual Option Chips ────────────────────────── */
 
 .promptpro-suggestions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 12px;
-  margin-bottom: 16px;
+  margin-top: 6px;
+  margin-bottom: 6px;
 }
 
 .promptpro-suggestion-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 11px;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
   font-weight: 500;
   cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #e2e8f0 !important;
   transition: all 150ms ease;
-}
-
-.promptpro-suggestion-chip::before {
-  content: '✦';
-  color: #a78bfa;
-  font-size: 10px;
+  user-select: none;
+  outline: none;
+  box-sizing: border-box;
 }
 
 .promptpro-suggestion-chip:hover {
-  background: rgba(167, 139, 250, 0.15);
-  border-color: rgba(167, 139, 250, 0.3);
-  color: #fff;
-  transform: translateY(-1px);
-}
-.promptpro-suggestion-chip:active {
-  transform: scale(0.96);
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
 }
 
-.promptpro-suggestions:empty {
-  display: none;
+.promptpro-suggestion-chip--active {
+  background: rgba(192, 132, 252, 0.16) !important;
+  border-color: rgba(192, 132, 252, 0.4) !important;
+  color: #ffffff !important;
 }
 
-/* ── Actions (Apply / Cancel) ───────────────────────── */
+.promptpro-suggestion-chip__sparkle {
+  color: #c084fc;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.promptpro-suggestion-chip:disabled {
+  opacity: 0.5 !important;
+  cursor: wait !important;
+  pointer-events: none !important;
+}
+
+/* ── Collapsible Style & Preferences ────────────────── */
+
+.promptpro-style-prefs {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  margin-top: 8px;
+  padding-top: 6px;
+  box-sizing: border-box;
+}
+
+.promptpro-style-prefs__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+  border-radius: 6px;
+  transition: opacity 150ms ease;
+}
+
+.promptpro-style-prefs__header:hover {
+  opacity: 0.85;
+}
+
+.promptpro-style-prefs__title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.promptpro-style-prefs__chevron {
+  color: rgba(255, 255, 255, 0.5);
+  transition: transform 200ms ease;
+  display: flex;
+  align-items: center;
+}
+
+.promptpro-style-prefs--open .promptpro-style-prefs__chevron {
+  transform: rotate(180deg);
+}
+
+.promptpro-style-prefs__badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.promptpro-style-prefs__body {
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+/* ── Actions & Apple-Style Action Bar ───────────────── */
 
 .promptpro-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding-top: 16px;
-}
-.promptpro-action-btn {
-  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: 50%;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.1);
-  border: none;
-}
-.promptpro-action-btn--cancel {
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.6);
-}
-.promptpro-action-btn--cancel:hover {
-  background: rgba(255, 69, 58, 1);
-  color: #fff;
-  transform: scale(1.05);
-  box-shadow: 0 0 12px rgba(255, 69, 58, 0.5), 0 0 6px rgba(255, 69, 58, 0.3);
-}
-.promptpro-action-btn--apply {
-  position: relative;
-  background: #fff;
-  color: #000;
-  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
-  overflow: hidden;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.promptpro-action-btn--apply::after {
-  content: '';
-  position: absolute;
-  top: -50%; left: -50%;
-  width: 200%; height: 200%;
-  background: linear-gradient(
-    to bottom right,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0) 40%,
-    rgba(255, 255, 255, 0.6) 50%,
-    rgba(255, 255, 255, 0) 60%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  transform: rotate(45deg) translateY(-100%);
-  transition: transform 0.6s cubic-bezier(0.25, 0.1, 0.25, 1);
-  pointer-events: none;
+.promptpro-action-btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  height: 36px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 160ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  box-sizing: border-box;
+  outline: none;
+}
+
+.promptpro-action-btn--cancel {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #cbd5e1 !important;
+  padding: 0 16px !important;
+}
+
+.promptpro-action-btn--cancel:hover {
+  background: rgba(255, 255, 255, 0.13) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+}
+
+.promptpro-action-btn--apply {
+  background: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  color: #0a0a0a !important;
+  font-weight: 600 !important;
+  padding: 0 18px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
 }
 
 .promptpro-action-btn--apply:hover {
-  background: #30d158;
-  color: #fff;
-  transform: scale(1.08) translateY(-2px);
-  box-shadow: 0 8px 24px rgba(48, 209, 88, 0.8), 0 0 16px rgba(48, 209, 88, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.3);
-}
-
-.promptpro-action-btn--apply:hover::after {
-  transform: rotate(45deg) translateY(100%);
+  background: #f1f5f9 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.25) !important;
 }
 
 .promptpro-action-btn--apply:active {
-  transform: scale(0.96);
+  transform: translateY(0) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
 }
 
-.promptpro-action-btn--apply:disabled {
-  opacity: 0.5;
-  pointer-events: none;
+.promptpro-action-btn:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
 }
+
+
+/* ── Auth Error Banner ──────────────────────────────── */
+
+.promptpro-auth-error-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 18px 14px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 12px;
+  gap: 8px;
+}
+
+.promptpro-auth-error-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f87171;
+}
+
+.promptpro-auth-error-desc {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.4;
+}
+
+.promptpro-auth-login-link {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  background: #ffffff;
+  color: #000000;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity 150ms ease;
+}
+
+.promptpro-auth-login-link:hover {
+  opacity: 0.9;
+}
+
+
 
 /* ── Toast Notifications ─────────────────────────────── */
 
@@ -604,100 +891,20 @@
 
 /* ── Light Mode Adaptations ─────────────────────────── */
 
-@media (prefers-color-scheme: light) {
-  .promptpro-btn {
-    background: rgba(255, 255, 255, 0.6);
-    color: #1a1a1e;
-    border-color: rgba(0, 0, 0, 0.1);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  }
-
-  .promptpro-btn:hover {
-    background: rgba(255, 255, 255, 1);
-  }
-  
-  .promptpro-btn__spinner {
-    border-color: rgba(0, 0, 0, 0.1);
-    border-top-color: #1a1a1e;
-  }
-
-  .promptpro-popover {
-    background: rgba(255, 255, 255, 0.85);
-    border-color: rgba(0, 0, 0, 0.08);
-    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.12), 
-                0 0 0 1px rgba(0, 0, 0, 0.04);
-    color: #1a1a1e;
-  }
-
-  .promptpro-popover__title { color: #000; }
-  .promptpro-section-title { color: rgba(0, 0, 0, 0.5); }
-  
-  .promptpro-score-ring__segment { background: rgba(0, 0, 0, 0.08); }
-  .promptpro-score-ring__segment--active { 
-    background: rgba(0, 0, 0, 0.8); 
-    box-shadow: none; 
-  }
-
-  .promptpro-preview {
-    background: rgba(0, 0, 0, 0.04);
-    color: rgba(0, 0, 0, 0.8);
-    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
-  }
-  
-  .promptpro-preview__addition {
-    background: rgba(46, 160, 67, 0.15);
-    color: #1a7f37;
-  }
-
-  .promptpro-preview__original { color: #000; }
-
-  .promptpro-dropdown__trigger {
-    background: rgba(0, 0, 0, 0.04);
-    border-color: rgba(0, 0, 0, 0.08);
-    color: #1a1a1e;
-  }
-  .promptpro-dropdown:hover .promptpro-dropdown__trigger {
-    background: rgba(0, 0, 0, 0.08);
-  }
-  .promptpro-dropdown__menu {
-    background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(0, 0, 0, 0.1);
-  }
-  .promptpro-dropdown__item { color: rgba(0, 0, 0, 0.6); }
-  .promptpro-dropdown__item:hover { background: rgba(0, 0, 0, 0.06); color: #000; }
-  .promptpro-dropdown__item--active { background: rgba(0, 0, 0, 0.05); color: #000; }
-
-  .promptpro-suggestion-chip {
-    background: rgba(0, 0, 0, 0.04);
-    border-color: rgba(0, 0, 0, 0.08);
-    color: rgba(0, 0, 0, 0.7);
-  }
-  .promptpro-suggestion-chip::before {
-    color: #8b5cf6;
-  }
-  .promptpro-suggestion-chip:hover {
-    background: rgba(139, 92, 246, 0.1);
-    border-color: rgba(139, 92, 246, 0.2);
-    color: #000;
-  }
-
-  .promptpro-action-btn--cancel { color: rgba(0, 0, 0, 0.6); }
-  .promptpro-action-btn--cancel:hover { 
-    background: rgba(255, 69, 58, 1); 
-    color: #fff; 
-    box-shadow: 0 0 12px rgba(255, 69, 58, 0.4); 
-  }
-  
-  .promptpro-action-btn--apply {
-    background: linear-gradient(135deg, #1a1a1e, #3a3a40);
-    color: #fff;
-  }
-  .promptpro-action-btn--apply:hover {
-    background: #30d158;
-    color: #fff;
-    box-shadow: 0 0 12px rgba(48, 209, 88, 0.4);
-  }
+html.light .promptpro-btn,
+[data-theme="light"] .promptpro-btn {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+  color: #374151 !important;
 }
+
+html.light .promptpro-btn:hover,
+[data-theme="light"] .promptpro-btn:hover {
+  background: rgba(0, 0, 0, 0.1) !important;
+  border-color: rgba(0, 0, 0, 0.3) !important;
+  color: #111827 !important;
+}
+
 
 /* ── Granular Score Diagnostics Card ── */
 

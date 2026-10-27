@@ -34,10 +34,10 @@ function createButton(onClick) {
   btn.setAttribute('data-promptpro', 'true');
   btn.title = 'Upgrade prompt with PromptPro';
 
-  // Icon + label (no innerHTML for dynamic content)
+  // Icon + label using official SVG mark
   const icon = document.createElement('span');
   icon.className = 'promptpro-btn__icon';
-  icon.textContent = '✨';
+  icon.innerHTML = `<svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 4C16 13 21 16 28 16C21 16 16 19 16 28C16 19 11 16 4 16C11 16 16 13 16 4Z" fill="currentColor" /></svg>`;
 
   const label = document.createElement('span');
   label.className = 'promptpro-btn__label';

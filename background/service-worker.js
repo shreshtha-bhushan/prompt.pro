@@ -109,6 +109,13 @@ function swTrack(eventName, properties) { _swSend(eventName, properties); }
 // Initialize analytics when service worker starts
 swInitAnalytics();
 
+// Reactively keep analytics opt-out preference in sync with popup toggles
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.pp_analytics_opt_out) {
+    _sw_optedOut = changes.pp_analytics_opt_out.newValue === true;
+  }
+});
+
 
 // ═══════════════════════════════════════════════════════════════
 // PROMPT ANALYZER — Decompose raw prompt into components
@@ -359,6 +366,7 @@ const REWRITE_STRATEGIES = {
     return parts.join('\n\n');
   }
 };
+REWRITE_STRATEGIES.cot = REWRITE_STRATEGIES.elaborate;
 
 // ═══════════════════════════════════════════════════════════════
 // TONE PRESETS — Post-processing transformations
@@ -775,6 +783,7 @@ function fallbackLocal(text, strategy, tone, lowTokenEnabled = false) {
   return rewritten;
 }
 
+
 // ═══════════════════════════════════════════════════════════════
 // SCORE DIAGNOSTIC ENGINE — Granular Quality Insights (AskWeave-level details)
 // ═══════════════════════════════════════════════════════════════
@@ -936,7 +945,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       for (const base of endpoints) {
         try {
           const resp = await fetch(`${base}/api/entitlement`, {
-            headers: { 'Authorization': `Bearer ${session.token}` }
+            headers: {
+              'Authorization': `Bearer ${session.token}`,
+              ...(session.user?.id ? { 'x-promptpro-user-id': session.user.id } : {})
+            }
           });
           if (resp.ok) {
             snapshot = await resp.json();
@@ -947,37 +959,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       }
 
-      // Check if session user has admin credentials
-      const uEmail = (session.user?.email || '').toLowerCase();
-      const uUsername = (session.user?.username || '').toLowerCase();
-      const uName = (session.user?.name || '').toLowerCase();
-      const isUserAdmin = uUsername === 'admin-ceo' ||
-        uUsername.includes('admin') ||
-        uEmail.includes('shreshthabhushan19') ||
-        uEmail.includes('shreshtha') ||
-        uName.includes('shreshtha') ||
-        session.user?.role === 'admin';
-
+      // Admin status is determined exclusively by the server-returned snapshot.
+      // publicMetadata.role is set via Clerk Dashboard only — never trust client-side signals.
       if (snapshot) {
-        if (isUserAdmin) {
-          snapshot.isAdmin = true;
-          snapshot.tier = 'admin';
-          snapshot.allowedModes = ['quick', 'advanced', 'max'];
-          snapshot.creditsBalance = 999999;
-          snapshot.monthlyCredits = 999999;
-        }
         chrome.storage.local.set({ entitlementSnapshot: snapshot }, () => {
           sendResponse({ success: true, snapshot });
         });
       } else {
         const fallback = result.entitlementSnapshot || defaultSnapshot;
-        if (isUserAdmin) {
-          fallback.isAdmin = true;
-          fallback.tier = 'admin';
-          fallback.allowedModes = ['quick', 'advanced', 'max'];
-          fallback.creditsBalance = 999999;
-          fallback.monthlyCredits = 999999;
-        }
         chrome.storage.local.set({ entitlementSnapshot: fallback }, () => {
           sendResponse({ success: true, snapshot: fallback });
         });
@@ -1018,8 +1007,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'OPTIMIZE_GATED') {
     const { text, mode } = message.payload || {};
 
-    if (!text || !mode) {
+    if (!text || !mode || typeof text !== 'string' || text.trim().length === 0) {
       sendResponse({ error: 'INVALID_REQUEST' });
+      return true;
+    }
+
+    if (text.length > 10000) {
+      sendResponse({ error: 'TOO_LONG', message: 'Prompt too long (max 10,000 characters)' });
       return true;
     }
 
@@ -1065,6 +1059,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
 
           if (!response.ok) {
+            if (response.status === 401) {
+              swTrack('optimization_failed', { mode, error_type: 'SESSION_EXPIRED' });
+              sendResponse({
+                error: 'SESSION_EXPIRED',
+                message: 'Your session has expired. Please visit the PromptPro dashboard to sign in again.'
+              });
+              return;
+            }
             swTrack('optimization_failed', { mode, error_type: 'OPTIMIZE_FAILED', status: response.status });
             sendResponse({
               error: 'OPTIMIZE_FAILED',
@@ -1122,12 +1124,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const suggestionsPromise = generateSmartSuggestions(text, analysis);
 
     // Retrieve settings dynamically to handle OpenRouter API & preferences
-    chrome.storage.local.get(['settings', 'authSession'], (result) => {
+    chrome.storage.local.get(['settings', 'authSession', 'selectedOptimizeMode'], (result) => {
       const settings = result.settings || {};
       const session = result.authSession || {};
-      const openrouterEnabled = !!settings.openrouterEnabled;
+      const selectedMode = result.selectedOptimizeMode || 'quick';
+      const openrouterEnabled = settings.openrouterEnabled !== false;
       const noFluff = settings.noFluff !== false;
       const lowTokenEnabled = !!settings.lowTokenEnabled;
+      const apiBase = session.apiBase || 'https://prompt-pro-liart.vercel.app';
 
       const cKey = upgradeCacheKey(text, strategy, tone, noFluff, lowTokenEnabled);
       const cached = cacheUpgradeGet(cKey);
@@ -1139,39 +1143,98 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       let rewrittenPromise;
 
       if (openrouterEnabled) {
-        // Call the Vercel API Endpoint
-        // IMPORTANT: Change this URL to your deployed Vercel URL (e.g., https://your-app.vercel.app/api/upgrade) before publishing
-        const apiUrl = 'https://prompt-pro-liart.vercel.app/api/upgrade';
-        console.log('[PromptPro] Sending request to Vercel API...', apiUrl);
+        // Call backend upgrade API (handles both localhost dev and production)
+        // All AI optimizations run through server-side OPENROUTER_API_KEY
+        const apiUrl = `${apiBase}/api/upgrade`;
+        console.log('[PromptPro] Sending request to upgrade API...', apiUrl);
 
-        rewrittenPromise = fetch(apiUrl, {
-          method: 'POST',
-          headers: {
+        let tokenToSend = session.token;
+        const userIdToSend = session.user?.id;
+
+        const getCookieToken = async () => {
+          if (typeof chrome !== 'undefined' && chrome.cookies) {
+            try {
+              if (chrome.cookies.getAll) {
+                const cookies = await new Promise(r => chrome.cookies.getAll({ name: '__session' }, r));
+                if (cookies && cookies.length > 0) {
+                  const matched = cookies.find(c => c.domain.includes('prompt-pro') || c.domain.includes('vercel') || c.domain.includes('localhost'));
+                  if (matched?.value) return matched.value;
+                  if (cookies[0]?.value) return cookies[0].value;
+                }
+              }
+              if (chrome.cookies.get) {
+                const c1 = await new Promise(r => chrome.cookies.get({ url: apiBase, name: '__session' }, r));
+                if (c1 && c1.value) return c1.value;
+                const c2 = await new Promise(r => chrome.cookies.get({ url: 'https://prompt-pro-liart.vercel.app', name: '__session' }, r));
+                if (c2 && c2.value) return c2.value;
+              }
+            } catch (_e) {}
+          }
+          return null;
+        };
+
+        rewrittenPromise = (async () => {
+          if (!tokenToSend) {
+            tokenToSend = await getCookieToken();
+          }
+
+          const headers = {
             'Content-Type': 'application/json',
-            ...(session.token ? { 'Authorization': `Bearer ${session.token}` } : {})
-          },
-          body: JSON.stringify({
+            ...(tokenToSend ? { 'Authorization': `Bearer ${tokenToSend}` } : {}),
+            ...(userIdToSend ? { 'x-promptpro-user-id': userIdToSend } : {})
+          };
+
+          const body = JSON.stringify({
             text: text,
             strategy: strategy,
             tone: tone,
             lowTokenEnabled: lowTokenEnabled,
-            noFluff: noFluff
-          })
-        })
-        .then(response => {
-          if (!response.ok) return response.json().then(e => { throw new Error(e.error || `HTTP ${response.status}`); });
-          return response.json();
-        })
-        .then(data => {
-          if (!data.success) throw new Error('API returned failure');
+            noFluff: noFluff,
+            mode: selectedMode
+          });
+
+          let response;
+          try {
+            response = await fetch(apiUrl, { method: 'POST', headers, body });
+          } catch (netErr) {
+            console.warn('[PromptPro] Primary API fetch failed with network error:', netErr);
+            if (apiUrl.includes('localhost') || !apiUrl.includes('prompt-pro-liart.vercel.app')) {
+              try {
+                response = await fetch('https://prompt-pro-liart.vercel.app/api/upgrade', { method: 'POST', headers, body });
+              } catch (_fbErr) {
+                return fallbackLocal(text, strategy, tone, lowTokenEnabled);
+              }
+            } else {
+              return fallbackLocal(text, strategy, tone, lowTokenEnabled);
+            }
+          }
+
+          if (!response.ok) {
+            console.warn(`[PromptPro] API returned HTTP ${response.status}, gracefully falling back to local optimization engine`);
+            return fallbackLocal(text, strategy, tone, lowTokenEnabled);
+          }
+
+          const data = await response.json();
+          if (!data.success && !data.rewritten) {
+            return fallbackLocal(text, strategy, tone, lowTokenEnabled);
+          }
+          if (data.creditsBalance !== undefined) {
+            chrome.storage.local.get(['entitlementSnapshot'], (snRes) => {
+              if (snRes.entitlementSnapshot) {
+                chrome.storage.local.set({
+                  entitlementSnapshot: {
+                    ...snRes.entitlementSnapshot,
+                    creditsBalance: data.creditsBalance,
+                    checkedAt: new Date().toISOString()
+                  }
+                });
+              }
+            });
+          }
           return data.rewritten;
-        })
-        .catch(error => {
-          console.warn('[PromptPro] Vercel API fetch failed. Falling back to local engine:', error);
-          return fallbackLocal(text, strategy, tone, lowTokenEnabled);
-        });
+        })();
       } else {
-        console.log('[PromptPro] Using local fallback engine (OpenRouter disabled in settings)');
+        console.log('[PromptPro] Using local fallback engine (Pro Optimization disabled in settings)');
         rewrittenPromise = Promise.resolve(fallbackLocal(text, strategy, tone, lowTokenEnabled));
       }
 
@@ -1194,11 +1257,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             applied: true
           };
           cacheUpgradeSet(cKey, payload);
-          swTrack('optimization_run', { mode: 'quick', source: 'extension', is_local: true, strategy, tone });
+          swTrack('optimization_run', { mode: selectedMode, source: 'extension', is_local: !openrouterEnabled, strategy, tone });
           sendResponse(payload);
         })
         .catch(err => {
-          swTrack('optimization_failed', { mode: 'quick', error_type: 'UPGRADE_FAILED', error_message: err.message });
+          swTrack('optimization_failed', { mode: selectedMode, error_type: 'UPGRADE_FAILED', error_message: err.message });
           sendResponse({ error: 'UPGRADE_FAILED', message: err.message });
         });
     });
@@ -1305,8 +1368,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'UPDATE_SETTINGS') {
+    const updates = message.payload || {};
+    chrome.storage.local.get(['settings'], (res) => {
+      const current = res.settings || {};
+      const newSettings = { ...current, ...updates };
+      chrome.storage.local.set({ settings: newSettings, ...updates }, () => {
+        sendResponse({ success: true, settings: newSettings });
+      });
+    });
+    return true;
+  }
+
+  if (message.type === 'AUTOCOMPLETE_PREDICT') {
+    const { text } = message.payload || {};
+    if (!text || typeof text !== 'string') {
+      sendResponse({ completion: null });
+      return true;
+    }
+
+    chrome.storage.local.get(['settings', 'authSession'], (res) => {
+      const settings = res.settings || {};
+      if (settings.autocompleteEnabled === false) {
+        sendResponse({ completion: null });
+        return;
+      }
+
+      const session = res.authSession || {};
+      const apiBase = session.apiBase || 'https://prompt-pro-liart.vercel.app';
+
+      fetch(`${apiBase}/api/autocomplete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      })
+      .then(r => r.ok ? r.json() : { completion: null })
+      .then(data => sendResponse({ completion: data?.completion || null }))
+      .catch(() => sendResponse({ completion: null }));
+    });
+    return true;
+  }
+
   if (message.type === 'SYNC_CLERK_TOKEN') {
-    const { token, user } = message.payload || {};
+    const { token, user, apiBase } = message.payload || {};
     if (token && user) {
       chrome.storage.local.get(['authSession', 'ignoreSyncUntil'], (result) => {
         if (result.ignoreSyncUntil && Date.now() < result.ignoreSyncUntil) {
@@ -1315,8 +1419,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         const oldSession = result.authSession;
-        if (oldSession && oldSession.token === token) {
-          // Token is the same, do nothing to prevent infinite onChanged loops
+        if (oldSession && oldSession.token === token && (!apiBase || oldSession.apiBase === apiBase)) {
+          // Token and apiBase are the same, do nothing to prevent infinite onChanged loops
           sendResponse({ success: true });
           return;
         }
@@ -1324,10 +1428,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const authSession = {
           token: token,
           user: user,
+          apiBase: apiBase || oldSession?.apiBase || 'https://prompt-pro-liart.vercel.app',
           linkedAt: Date.now()
         };
         chrome.storage.local.set({ authSession, skipLogin: false }, () => {
-          console.log('[PromptPro] Extension synced with Clerk session for:', user.email);
+          console.log('[PromptPro] Extension synced with Clerk session for:', user.email, 'apiBase:', authSession.apiBase);
         });
 
         // Track extension authentication — user linked dashboard session to extension

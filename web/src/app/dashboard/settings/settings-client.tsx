@@ -18,7 +18,6 @@ const DEFAULT_SETTINGS = {
   noFluff: false,
   siteMemory: true,
   autocompleteEnabled: true,
-  openrouterApiKey: "",
 }
 
 export function SettingsClient({ userId, clerkToken }: { userId: string, clerkToken: string | null }) {
@@ -158,21 +157,6 @@ export function SettingsClient({ userId, clerkToken }: { userId: string, clerkTo
               </div>
               <Switch checked={settings.siteMemory} onCheckedChange={handleToggle("siteMemory")} />
             </div>
-
-            <div className="space-y-3 pt-2">
-              <Label className="text-sm text-[--text-secondary] uppercase tracking-wider font-semibold">OpenRouter API Key (Optional)</Label>
-              <Input
-                type="password"
-                placeholder="sk-or-v1-..."
-                value={settings.openrouterApiKey}
-                onChange={(e) => handleChange("openrouterApiKey")(e.target.value)}
-                className="bg-[--layer-3] border-[--border-side] text-[--text-primary]"
-              />
-              <p className="text-[10px] text-[--text-secondary]">
-                Overrides the shared API pool and uses your own billing for OpenRouter models.
-              </p>
-            </div>
-
           </CardContent>
         </Card>
       </div>

@@ -14,6 +14,8 @@ import { ensureProfile } from "@/lib/entitlement";
 import { getRole } from "@/lib/roles";
 import { getCorsHeaders, handleOptions } from "@/lib/cors";
 
+import { resolveAuthUserId } from "@/lib/auth-resolver";
+
 export const dynamic = "force-dynamic";
 
 export async function OPTIONS(request: NextRequest) {
@@ -23,7 +25,7 @@ export async function OPTIONS(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request);
 
-  const { userId } = await auth();
+  const userId = await resolveAuthUserId(request);
   if (!userId) {
     return NextResponse.json(
       { error: "unauthorized", code: "AUTH_REQUIRED" },

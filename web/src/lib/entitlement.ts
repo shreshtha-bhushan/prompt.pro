@@ -8,7 +8,7 @@
  * because it only exposes data for the currently authenticated Clerk user.
  */
 
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { auth, currentUser, clerkClient } from "@clerk/nextjs/server";
 import { getAdminClient } from "./supabase/admin";
 import { PLAN_LIMITS, type PlanTier, type OptimizationMode } from "./plans";
 import { getRole } from "./roles";
@@ -72,30 +72,80 @@ export async function getEntitlement(): Promise<EntitlementSnapshot | null> {
  * Called on first sign-in / sync — creates a row with free-tier defaults
  * if none exists. Safe to call repeatedly (upsert with no-op on conflict).
  */
-export async function ensureProfile(userId: string): Promise<void> {
+export async function ensureProfile(userId: string): Promise<any> {
   try {
     const supabase = getAdminClient();
 
     const { data: existing } = await supabase
       .from("profiles")
-      .select("id, clerk_id")
+      .select("*")
       .eq("clerk_id", userId)
       .maybeSingle();
 
-    if (!existing) {
-      await supabase.from("profiles").upsert(
+    if (existing) {
+      return existing;
+    }
+
+    let email = `${userId}@promptpro.internal`;
+    let fullName = "";
+
+    try {
+      const client = await clerkClient();
+      const clerkUser = await client.users.getUser(userId);
+      if (clerkUser) {
+        email = clerkUser.primaryEmailAddress?.emailAddress || email;
+        fullName = clerkUser.fullName || `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim();
+      }
+    } catch (_ce) {}
+
+    // Satisfy profiles_id_fkey by checking or creating a shadow user in auth.users
+    let authUserId: string | null = null;
+    try {
+      const { data: userList } = await supabase.auth.admin.listUsers();
+      const matched = userList?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
+      if (matched) {
+        authUserId = matched.id;
+      } else {
+        const { data: created } = await supabase.auth.admin.createUser({
+          email,
+          email_confirm: true,
+          user_metadata: { clerk_id: userId, full_name: fullName }
+        });
+        authUserId = created?.user?.id || null;
+      }
+    } catch (_ae) {}
+
+    if (!authUserId) {
+      const fallbackEmail = `${userId}_${Date.now()}@promptpro.internal`;
+      const { data: fbUser } = await supabase.auth.admin.createUser({
+        email: fallbackEmail,
+        email_confirm: true,
+        user_metadata: { clerk_id: userId }
+      }).catch(() => ({ data: null }));
+      authUserId = fbUser?.user?.id || null;
+    }
+
+    if (authUserId) {
+      const { data: inserted, error: pErr } = await supabase.from("profiles").upsert(
         {
+          id: authUserId,
           clerk_id: userId,
+          email: email.includes('@promptpro.internal') ? null : email,
+          full_name: fullName || null,
           plan_tier: "free",
           plan_status: "none",
           credits_balance: 50,
         },
-        { onConflict: "clerk_id", ignoreDuplicates: true }
-      );
+        { onConflict: "clerk_id" }
+      ).select().single();
+
+      if (inserted) return inserted;
+      if (pErr) console.error("[ensureProfile] Upsert error:", pErr);
     }
   } catch (err) {
     console.error("[ensureProfile] Error:", err);
   }
+  return null;
 }
 
 /**

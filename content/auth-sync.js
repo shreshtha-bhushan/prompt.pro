@@ -11,11 +11,14 @@ window.addEventListener("message", (event) => {
     try {
       chrome.runtime.sendMessage({
         type: "SYNC_CLERK_TOKEN",
-        payload: event.data.payload
+        payload: {
+          ...event.data.payload,
+          apiBase: window.location.origin
+        }
       }, (response) => {
         const _err = chrome.runtime.lastError;
         if (response && response.success) {
-          console.log("[PromptPro] Successfully synced auth token to extension.");
+          console.log("[PromptPro] Successfully synced auth token to extension from:", window.location.origin);
         }
       });
     } catch (err) {}
@@ -37,13 +40,15 @@ window.addEventListener("message", (event) => {
         lowTokenEnabled: Boolean(payload.lowTokenEnabled),
         noFluff: Boolean(payload.noFluff),
         siteMemory: Boolean(payload.siteMemory),
-        autocompleteEnabled: Boolean(payload.autocompleteEnabled),
-        openrouterApiKey: payload.openrouterApiKey || "",
-        openrouterEnabled: Boolean(payload.openrouterApiKey)
+        autocompleteEnabled: Boolean(payload.autocompleteEnabled)
       };
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set(extSettings, () => {
-          console.log("[PromptPro] Successfully synced web dashboard settings to extension storage:", extSettings);
+        chrome.storage.local.get(['settings'], (res) => {
+          const current = res.settings || {};
+          const merged = { ...current, ...extSettings };
+          chrome.storage.local.set({ settings: merged, ...extSettings }, () => {
+            console.log("[PromptPro] Successfully synced web dashboard settings to extension storage:", merged);
+          });
         });
       }
       chrome.runtime.sendMessage({ type: "UPDATE_SETTINGS", payload: extSettings }, () => {
