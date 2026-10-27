@@ -36,7 +36,7 @@
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/ssr": "^0.10.3",
-    "@supabase/supabase-js": "^2.107.0",
+    "@supabase/supabase-js": "^2.112.3",
     "@tanstack/react-table": "^8.21.3",
     "@whop/sdk": "^0.0.42",
     "class-variance-authority": "^0.7.1",
