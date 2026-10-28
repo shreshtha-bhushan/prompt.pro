@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PromptPro — Background Service Worker (Phase 1)
  * 
  * Advanced prompt optimization engine with:
@@ -601,14 +601,148 @@ const IntelligenceMemory = {
     
     if (actionType === 'tone_accept') {
       profile.preferences.dominantTone = value;
-      profile.acceptedSuggestions[value] = (profile.acceptedSuggestions[value] || 0) + 1;
+      profile.acceptedSuggestions[`tone:${value}`] = (profile.acceptedSuggestions[`tone:${value}`] || 0) + 1;
+    } else if (actionType === 'strategy_accept') {
+      // V3: Track strategy usage for recommendation
+      profile.preferences.dominantStrategy = value;
+      profile.acceptedSuggestions[`strategy:${value}`] = (profile.acceptedSuggestions[`strategy:${value}`] || 0) + 1;
     } else if (actionType === 'suggestion_click') {
       profile.acceptedSuggestions[value] = (profile.acceptedSuggestions[value] || 0) + 1;
     }
     
     await chrome.storage.local.set({ userProfile: profile });
+  },
+
+  /**
+   * V3: Get recommended tone/strategy from historical usage.
+   * Returns the most-used tone and strategy based on acceptedSuggestions counts.
+   * Used as the lowest-priority fallback in the style resolution chain.
+   */
+  async getRecommendation() {
+    const profile = await this.getProfile();
+    const suggestions = profile.acceptedSuggestions || {};
+
+    let bestTone = profile.preferences.dominantTone || null;
+    let bestStrategy = profile.preferences.dominantStrategy || null;
+
+    // Re-derive from raw counts in case dominantTone/Strategy fell out of sync
+    let maxToneCount = 0;
+    let maxStrategyCount = 0;
+    for (const [key, count] of Object.entries(suggestions)) {
+      if (key.startsWith('tone:')) {
+        const t = key.slice(5);
+        if (count > maxToneCount) { maxToneCount = count; bestTone = t; }
+      } else if (key.startsWith('strategy:')) {
+        const s = key.slice(9);
+        if (count > maxStrategyCount) { maxStrategyCount = count; bestStrategy = s; }
+      }
+    }
+
+    return {
+      recommendedTone: bestTone,
+      recommendedStrategy: bestStrategy || 'enhance'
+    };
   }
 };
+
+// ═══════════════════════════════════════════════════════════════
+// V3: AUTOMATIC STYLE DETECTION ENGINE
+// Detects writing style from lexical cues. Returns confidence score and signals.
+// ═══════════════════════════════════════════════════════════════
+
+const STYLE_PATTERNS = {
+  academic: {
+    patterns: [
+      /\b(thesis|dissertation|literature review|methodology|scholarly|hypothesis|peer.reviewed|citation|academic|empirical|theoretical framework|research paper|journal|survey|meta.analysis)\b/i,
+      /\b(analyze critically|critical analysis|discourse analysis|epistemology|ontology|hermeneutics|positivism|qualitative|quantitative research)\b/i
+    ],
+    weight: 1.2
+  },
+  technical: {
+    patterns: [
+      /\b(function|algorithm|api|debug|implement|typescript|python|javascript|runtime|codebase|refactor|deploy|microservice|database|sql|regex|endpoint|library|framework|module|class|interface|recursion)\b/i,
+      /\b(time complexity|big o|memory leak|race condition|concurrency|async|await|promise|dependency injection|unit test|integration test|ci\/cd)\b/i
+    ],
+    weight: 1.0
+  },
+  creative: {
+    patterns: [
+      /\b(story|poem|narrative|character|scene|dialogue|plot|fiction|metaphor|prose|screenplay|novel|short story|creative writing|imagery|setting|protagonist|antagonist|arc)\b/i,
+      /\b(evocative|vivid|lyrical|voice|tone of voice|write a|craft a|compose a)\b/i
+    ],
+    weight: 1.0
+  },
+  professional: {
+    patterns: [
+      /\b(email|client|stakeholder|proposal|executive summary|meeting|deliverable|action item|project plan|business case|roi|kpi|strategy|roadmap|quarterly|annual report|memo|briefing)\b/i,
+      /\b(best practices|professional tone|corporate|enterprise|b2b|b2c|revenue|budget|forecast|milestone)\b/i
+    ],
+    weight: 0.9
+  },
+  casual: {
+    patterns: [
+      /\b(btw|lol|kinda|gonna|wanna|idk|fyi|ngl|tbh|omg|hey|asap|super|awesome|cool|basically|literally|stuff|thing|get the gist)\b/i,
+      /[?!]{2,}|\.\.\.|\bgotta\b|\byeah\b|\bnope\b/i
+    ],
+    weight: 0.8
+  }
+};
+
+/**
+ * detectPromptStyle — V3 Automatic Style Detection Engine.
+ *
+ * @param {string} text  — Raw prompt text
+ * @param {object} analysis  — Pre-computed analyzePrompt() result
+ * @returns {{ detectedStyle: string|null, confidence: number, signals: string[] }}
+ */
+function detectPromptStyle(text, analysis) {
+  if (!text || text.trim().length < 8) {
+    return { detectedStyle: null, confidence: 0, signals: [] };
+  }
+
+  const scores = {};
+  const signals = {};
+
+  for (const [style, config] of Object.entries(STYLE_PATTERNS)) {
+    let hits = 0;
+    const matchedTerms = [];
+    for (const pattern of config.patterns) {
+      const matches = text.match(new RegExp(pattern.source, 'gi')) || [];
+      hits += matches.length;
+      matchedTerms.push(...matches.slice(0, 3));
+    }
+    scores[style] = hits * config.weight;
+    signals[style] = [...new Set(matchedTerms.map(m => m.toLowerCase()))].slice(0, 5);
+  }
+
+  // Also factor in existing analysis signals
+  if (analysis) {
+    if (analysis.isCodeRelated) scores.technical = (scores.technical || 0) + 1.5;
+    if (analysis.isWriting) scores.creative = (scores.creative || 0) + 0.5;
+    if (analysis.isCreative) scores.creative = (scores.creative || 0) + 1.0;
+  }
+
+  // Find highest scoring style
+  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  if (!sorted.length || sorted[0][1] === 0) {
+    return { detectedStyle: null, confidence: 0, signals: [] };
+  }
+
+  const [topStyle, topScore] = sorted[0];
+  const secondScore = sorted[1]?.[1] || 0;
+  const totalScore = sorted.reduce((acc, [, s]) => acc + s, 0);
+
+  // Confidence: weighted combination of absolute score and separation from second-best
+  const absoluteConf = Math.min(1, topScore / 6);
+  const separationConf = totalScore > 0 ? Math.min(1, (topScore - secondScore) / Math.max(1, topScore)) : 0;
+  const confidence = Math.round(((absoluteConf * 0.6) + (separationConf * 0.4)) * 100) / 100;
+
+  return {
+    detectedStyle: topStyle,
+    confidence,
+    signals: signals[topStyle] || []
+  };
+}
 
 // ═══════════════════════════════════════════════════════════════
 // INTELLIGENCE LAYER: SUGGESTION ENGINE (Phase 3)
@@ -1278,6 +1412,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+
+  // V3: DETECT_STYLE - Automatic style detection engine
+  if (message.type === 'DETECT_STYLE') {
+    const { text } = message.payload || {};
+    if (!text || typeof text !== 'string') {
+      sendResponse({ detectedStyle: null, confidence: 0, signals: [] });
+      return true;
+    }
+    const analysis = analyzePrompt(text);
+    const result = detectPromptStyle(text, analysis);
+    sendResponse(result);
+    return true;
+  }
+
+  // V3: GET_RECOMMENDATION - Return learned style preferences
+  if (message.type === 'GET_RECOMMENDATION') {
+    IntelligenceMemory.getRecommendation().then(sendResponse);
+    return true;
+  }
   if (message.type === 'TRACK_EVENT') {
     const { eventName, properties } = message.payload || {};
     if (eventName && typeof swTrack === 'function') {

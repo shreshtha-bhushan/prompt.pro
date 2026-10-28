@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PromptPro — Content Script (Production-Grade Rewrite)
  *
  * Fixes applied:
@@ -948,6 +948,48 @@
   }
 
   // ═══════════════════════════════════════════════════════════
+  // V3: Canonical Style Resolution Contract
+  // ═══════════════════════════════════════════════════════════
+
+  /**
+   * resolveEffectiveStyle — single source of truth for { tone, strategy }.
+   *
+   * Priority chain (highest → lowest):
+   *   1. STATE.activeTone / STATE.activeStrategy (user explicitly selected in this session)
+   *   2. Site-memory override (settings.sites[siteId].defaultTone/Strategy)
+   *   3. Global settings (settings.defaultTone / settings.defaultStrategy)
+   *   4. 'none' / 'enhance'
+   *
+   * Always call this instead of reading STATE.activeTone directly in hot paths.
+   */
+  function resolveEffectiveStyle(adapter) {
+    const siteId = adapter ? adapter.siteId : null;
+    const s = STATE.settings || {};
+
+    // Tone resolution
+    let tone = STATE.activeTone;
+    if (tone === undefined || tone === null) {
+      if (siteId && s.siteMemory && s.sites && s.sites[siteId] && s.sites[siteId].defaultTone !== undefined) {
+        tone = s.sites[siteId].defaultTone;
+      } else {
+        tone = s.defaultTone || null;
+      }
+    }
+
+    // Strategy resolution
+    let strategy = STATE.activeStrategy;
+    if (!strategy) {
+      if (siteId && s.siteMemory && s.sites && s.sites[siteId] && s.sites[siteId].defaultStrategy) {
+        strategy = s.sites[siteId].defaultStrategy;
+      } else {
+        strategy = s.defaultStrategy || 'enhance';
+      }
+    }
+
+    return { tone: tone || null, strategy: strategy || 'enhance' };
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // Extension Styles & Local Synthesis Engine
   // ═══════════════════════════════════════════════════════════
 
@@ -1416,7 +1458,7 @@
         <span>Rewrite Preview</span>
       </div>
       <div class="promptpro-header-right">
-        <span class="promptpro-word-count" id="promptpro-word-count"></span>
+        <span id="promptpro-auto-detect-badge" style="display:none;align-items:center;gap:4px;font-size:10px;font-weight:600;letter-spacing:0.03em;padding:2px 7px;border-radius:20px;background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);cursor:default;white-space:nowrap;"></span>`r`n        <span class="promptpro-word-count" id="promptpro-word-count"></span>
         <div class="promptpro-score-container" id="promptpro-score-container">
           <div class="promptpro-score-deltas" id="promptpro-score-deltas"></div>
           <div class="promptpro-score-progress" id="${IDS.RINGS}" role="progressbar" aria-label="Prompt quality score">
@@ -1517,10 +1559,13 @@
       { id: 'humorous', label: 'Humorous' }
     ];
 
-    let currentTone = STATE.activeTone || 'professional';
-    if (currentTone === 'none' || !currentTone) {
-      currentTone = 'professional';
-    }
+    // V3 FIX: Do NOT use a local closure variable for currentTone.
+    // Always read STATE.activeTone at action-time to prevent the Academic-vs-Professional mismatch bug.
+    // getActiveToneId() is a live getter that reflects the true canonical tone at any moment.
+    const getActiveToneId = () => {
+      const t = STATE.activeTone;
+      return (!t || t === 'none') ? 'professional' : t;
+    };
 
     const toneDropdown = document.createElement('div');
     toneDropdown.className = 'promptpro-dropdown';
@@ -1544,7 +1589,7 @@
     dropdownTrigger.style.boxSizing = 'border-box';
     dropdownTrigger.style.transition = 'all 0.2s cubic-bezier(0.25, 0, 0.2, 1)';
 
-    const activeToneObj = tonesList.find(t => t.id === currentTone) || tonesList[1];
+    const activeToneObj = tonesList.find(t => t.id === getActiveToneId()) || tonesList[1];
     const dropdownValue = document.createElement('span');
     dropdownValue.className = 'promptpro-dropdown__value';
     dropdownValue.style.color = '#ffffff';
@@ -1581,7 +1626,8 @@
 
     tonesList.forEach(t => {
       const item = document.createElement('div');
-      item.className = 'promptpro-dropdown__item' + (t.id === currentTone ? ' promptpro-dropdown__item--active' : '');
+      // V3 FIX: Read getActiveToneId() at render time, not a stale closure
+      item.className = 'promptpro-dropdown__item' + (t.id === getActiveToneId() ? ' promptpro-dropdown__item--active' : '');
       item.setAttribute('data-value', t.id);
       item.style.display = 'flex';
       item.style.alignItems = 'center';
@@ -1591,12 +1637,12 @@
       item.style.cursor = 'pointer';
       item.style.fontSize = '12.5px';
       item.style.fontWeight = '500';
-      item.style.color = t.id === currentTone ? '#ffffff' : 'rgba(255, 255, 255, 0.7)';
+      item.style.color = t.id === getActiveToneId() ? '#ffffff' : 'rgba(255, 255, 255, 0.7)';
       item.style.transition = 'all 0.15s ease';
 
       item.innerHTML = `
         <span>${t.label}</span>
-        <svg class="promptpro-dropdown__check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:${t.id === currentTone ? 'block' : 'none'};color:#ffffff;"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
+        <svg class="promptpro-dropdown__check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:${t.id === getActiveToneId() ? 'block' : 'none'};color:#ffffff;"><polyline points="10 3 4.5 8.5 2 6"></polyline></svg>
       `;
 
       item.addEventListener('mouseenter', () => {
@@ -1604,21 +1650,29 @@
         item.style.color = '#ffffff';
       });
       item.addEventListener('mouseleave', () => {
-        item.style.background = (t.id === currentTone) ? 'rgba(255, 255, 255, 0.05)' : 'transparent';
-        item.style.color = (t.id === currentTone) ? '#ffffff' : 'rgba(255, 255, 255, 0.7)';
+        // V3 FIX: Read live STATE, not stale closure
+        const isActive = t.id === getActiveToneId();
+        item.style.background = isActive ? 'rgba(255, 255, 255, 0.05)' : 'transparent';
+        item.style.color = isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.7)';
       });
 
       item.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        currentTone = t.id;
+        // V3 FIX: Update STATE.activeTone (source of truth) — no stale closure write
         const nextTone = t.id === 'none' ? null : t.id;
         STATE.activeTone = nextTone;
+        // Mark as explicit user selection so auto-detection won't override it
+        STATE.toneIsExplicit = true;
         dropdownValue.textContent = t.label;
         const badge = document.getElementById('promptpro-current-tone-badge');
         if (badge) badge.textContent = t.label;
         toneDropdown.classList.remove('promptpro-dropdown--open');
         dropdownMenu.style.display = 'none';
+
+        // Hide auto-detect badge when user explicitly picks a tone
+        const autoDetectBadge = document.getElementById('promptpro-auto-detect-badge');
+        if (autoDetectBadge) autoDetectBadge.style.display = 'none';
 
         dropdownMenu.querySelectorAll('.promptpro-dropdown__item').forEach(it => {
           const isMatch = it.getAttribute('data-value') === t.id;
@@ -1780,6 +1834,7 @@
         const textToInject = STATE.currentRewrite;
         const variables = parsePromptVariables(textToInject);
         const delta = STATE.currentScore ? (STATE.currentScore.after.total - STATE.currentScore.before.total) : 0;
+        const { tone: appliedTone, strategy: appliedStrategy } = resolveEffectiveStyle(adapter);
 
         const recordHistoryAndToast = (finalText) => {
           chrome.runtime.sendMessage({
@@ -1790,10 +1845,16 @@
               score: STATE.currentScore?.after?.total || 85,
               scoreBefore: STATE.currentScore?.before?.total || 50,
               site: adapter.siteId,
-              strategy: STATE.settings?.sites?.[adapter.siteId]?.defaultStrategy || STATE.settings?.defaultStrategy || 'enhance'
+              strategy: appliedStrategy
             }
           });
           showToast(`Prompt upgraded! (+${delta > 0 ? delta : 0})`, 'success');
+
+          // Phase 3: Wire preference memory learning loop
+          if (appliedTone) {
+            registerAction('tone_accept', appliedTone);
+          }
+          registerAction('strategy_accept', appliedStrategy);
         };
 
         if (variables.length > 0) {
@@ -1884,12 +1945,15 @@
     STATE.isPreviewActive = true; // Fix 4: guard
     STATE.originalText = text;
     STATE.lastAdapter = adapter;
+    STATE.toneIsExplicit = false; // V3: reset explicit flag on each open
 
     if (STATE.settings) {
       const currentTone = (STATE.settings.siteMemory && STATE.settings.sites?.[adapter.siteId]?.defaultTone !== undefined)
         ? STATE.settings.sites[adapter.siteId].defaultTone
         : STATE.settings.defaultTone;
       STATE.activeTone = currentTone || null;
+      // If user has a persisted tone, mark as explicit so auto-detect won't override
+      STATE.toneIsExplicit = !!STATE.activeTone;
       updateInlineToneUI(STATE.activeTone);
 
       const currentStrategy = (STATE.settings.siteMemory && STATE.settings.sites?.[adapter.siteId]?.defaultStrategy !== undefined)
@@ -1898,6 +1962,34 @@
       STATE.activeStrategy = currentStrategy;
       updateStrategyChipsUI(STATE.activeStrategy);
     }
+
+    // Phase 2: Fire automatic style detection (non-blocking)
+    // Only auto-apply if user has no explicit tone preference
+    chrome.runtime.sendMessage({ type: 'DETECT_STYLE', payload: { text } }, (detection) => {
+      if (chrome.runtime.lastError || !detection || !STATE.isOpen) return;
+      if (detection.confidence >= 0.65 && detection.detectedStyle) {
+        const autoDetectBadge = document.getElementById('promptpro-auto-detect-badge');
+        if (!STATE.toneIsExplicit) {
+          // Auto-apply: no explicit user preference set
+          STATE.activeTone = detection.detectedStyle;
+          updateInlineToneUI(STATE.activeTone);
+          if (autoDetectBadge) {
+            autoDetectBadge.textContent = `Auto: ${detection.detectedStyle}`;
+            autoDetectBadge.style.display = 'inline-flex';
+            autoDetectBadge.title = `Detected style: ${detection.detectedStyle} (${Math.round(detection.confidence * 100)}% confidence). Signals: ${(detection.signals || []).join(', ')}`;
+          }
+          scheduleRefreshPreview(adapter);
+        } else {
+          // Informational only — user has an explicit tone, show badge but don't override
+          if (autoDetectBadge) {
+            autoDetectBadge.textContent = `Detected: ${detection.detectedStyle}`;
+            autoDetectBadge.style.display = 'inline-flex';
+            autoDetectBadge.style.opacity = '0.6';
+            autoDetectBadge.title = `Style detected as "${detection.detectedStyle}" but your explicit tone "${STATE.activeTone || 'default'}" is being used.`;
+          }
+        }
+      }
+    });
 
     const popover = document.getElementById(IDS.POPOVER);
     const btn = document.getElementById(IDS.BTN);
@@ -1944,7 +2036,8 @@
     applyBtn.disabled = true;
 
     try {
-      let finalToneText = STATE.activeTone;
+      // V3: Use resolveEffectiveStyle() as canonical source — fixes Academic-vs-Professional mismatch
+      const { tone: finalToneText, strategy: finalStrategy } = resolveEffectiveStyle(adapter);
       let contextPayload = STATE.originalText;
 
       // Append active context blocks
@@ -1954,15 +2047,6 @@
           const blocksText = activeBlocks.map(b => `[Context: ${b.title}]\n${b.content}`).join('\n\n');
           contextPayload = contextPayload.trim() + '\n\n' + blocksText;
         }
-      }
-
-      let finalStrategy = 'enhance';
-      if (STATE.activeStrategy) {
-        finalStrategy = STATE.activeStrategy;
-      } else if (STATE.settings) {
-        finalStrategy = (STATE.settings.siteMemory && STATE.settings.sites?.[adapter.siteId]?.defaultStrategy !== undefined)
-          ? STATE.settings.sites[adapter.siteId].defaultStrategy
-          : (STATE.settings.defaultStrategy || 'enhance');
       }
 
       const result = await requestRewrite(contextPayload, adapter.siteId, finalStrategy, finalToneText);
@@ -1990,8 +2074,9 @@
       // Update header word count comparison
       updateWordCountDisplay(STATE.originalText, STATE.currentRewrite);
 
-      // Derive truthful change summary
-      const changes = deriveChangeSummary(STATE.originalText, STATE.currentRewrite, finalStrategy, finalToneText, {
+      // Derive truthful change summary (uses the same resolved tone/strategy)
+      const { tone: resolvedTone, strategy: resolvedStrategy } = resolveEffectiveStyle(adapter);
+      const changes = deriveChangeSummary(STATE.originalText, STATE.currentRewrite, resolvedStrategy, resolvedTone, {
         noFluff: STATE.settings?.noFluff !== false,
         lowTokenEnabled: !!STATE.settings?.lowTokenEnabled
       });
