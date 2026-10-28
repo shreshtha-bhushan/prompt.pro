@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PromptPro — Content Script (Production-Grade Rewrite)
  *
  * Fixes applied:
@@ -1458,7 +1458,8 @@
         <span>Rewrite Preview</span>
       </div>
       <div class="promptpro-header-right">
-        <span id="promptpro-auto-detect-badge" style="display:none;align-items:center;gap:4px;font-size:10px;font-weight:600;letter-spacing:0.03em;padding:2px 7px;border-radius:20px;background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);cursor:default;white-space:nowrap;"></span>`r`n        <span class="promptpro-word-count" id="promptpro-word-count"></span>
+        <span id="promptpro-auto-detect-badge" style="display:none;align-items:center;gap:4px;font-size:10px;font-weight:600;letter-spacing:0.03em;padding:2px 7px;border-radius:20px;background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);cursor:default;white-space:nowrap;"></span>
+        <span class="promptpro-word-count" id="promptpro-word-count"></span>
         <div class="promptpro-score-container" id="promptpro-score-container">
           <div class="promptpro-score-deltas" id="promptpro-score-deltas"></div>
           <div class="promptpro-score-progress" id="${IDS.RINGS}" role="progressbar" aria-label="Prompt quality score">
