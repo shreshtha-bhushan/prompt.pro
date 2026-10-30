@@ -69,8 +69,8 @@ test('Contextual refinement actions container is present',
   mainJs.includes('id = IDS.SUGGESTIONS') || mainJs.includes('id="promptpro-suggestions"')
 );
 
-test('Collapsible style preferences renamed to "Style & preferences"', 
-  mainJs.includes('Style & preferences') && mainJs.includes('promptpro-style-prefs')
+test('Actual tone dropdown selector is present directly in popover', 
+  mainJs.includes('toneDropdown') && mainJs.includes('popover.appendChild(toneDropdown)')
 );
 
 test('Action buttons: primary "Apply upgrade" and secondary "Cancel"', 

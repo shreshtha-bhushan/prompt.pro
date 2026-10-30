@@ -913,18 +913,100 @@
   // Toast Notifications
   // ═══════════════════════════════════════════════════════════
 
-  function showToast(message, type = 'info') {
+  let activeToastDismissTimer = null;
+  let activeToastRemainingMs = 2600;
+  let activeToastStartMs = 0;
+
+  function showToast(message, type = 'info', delta = null) {
+    // If incoming message matches legacy template "Prompt upgraded! (+N)", parse delta
+    if (typeof message === 'string' && message.startsWith('Prompt upgraded') && delta == null) {
+      const match = message.match(/\(\+?(-?\d+)\)/);
+      if (match) {
+        delta = parseInt(match[1], 10);
+      }
+      message = 'Prompt upgraded';
+    }
+
+    if (activeToastDismissTimer) {
+      clearTimeout(activeToastDismissTimer);
+      activeToastDismissTimer = null;
+    }
     document.getElementById('promptpro-toast')?.remove();
+
     const toast = document.createElement('div');
     toast.id = 'promptpro-toast';
     toast.className = `promptpro-toast promptpro-toast--${type}`;
-    toast.innerHTML = `<span class="promptpro-toast__icon">${type === 'error' ? '⚠️' : '✅'}</span><span class="promptpro-toast__text">${message}</span>`;
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+    toast.setAttribute('aria-atomic', 'true');
+
+    // 20px circular badge with thin-stroke checkmark or amber warning icon
+    const iconBadge = document.createElement('span');
+    iconBadge.className = 'promptpro-toast__icon-badge';
+    if (type === 'error') {
+      iconBadge.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+    } else {
+      iconBadge.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    }
+
+    const textEl = document.createElement('span');
+    textEl.className = 'promptpro-toast__text';
+    textEl.textContent = message;
+
+    toast.appendChild(iconBadge);
+    toast.appendChild(textEl);
+
+    // Score delta as a separate trailing chip (+N)
+    if (typeof delta === 'number' && delta > 0) {
+      const chip = document.createElement('span');
+      chip.className = 'promptpro-toast__chip';
+      chip.textContent = `+${delta}`;
+      toast.appendChild(chip);
+    }
+
+    // Hover to pause dismiss timer
+    activeToastRemainingMs = 2600;
+    activeToastStartMs = Date.now();
+
+    const startTimer = () => {
+      activeToastStartMs = Date.now();
+      activeToastDismissTimer = setTimeout(() => {
+        dismissToast(toast);
+      }, activeToastRemainingMs);
+    };
+
+    const pauseTimer = () => {
+      if (activeToastDismissTimer) {
+        clearTimeout(activeToastDismissTimer);
+        activeToastDismissTimer = null;
+        const elapsed = Date.now() - activeToastStartMs;
+        activeToastRemainingMs = Math.max(200, activeToastRemainingMs - elapsed);
+      }
+    };
+
+    toast.addEventListener('mouseenter', pauseTimer);
+    toast.addEventListener('mouseleave', () => {
+      if (!toast.classList.contains('promptpro-toast--hiding')) {
+        startTimer();
+      }
+    });
+
+    function dismissToast(el) {
+      if (!el.isConnected) return;
+      el.classList.remove('promptpro-toast--visible');
+      el.classList.add('promptpro-toast--hiding');
+      setTimeout(() => {
+        el.remove();
+        if (activeToastDismissTimer) {
+          clearTimeout(activeToastDismissTimer);
+          activeToastDismissTimer = null;
+        }
+      }, 200);
+    }
+
     document.body.appendChild(toast);
     requestAnimationFrame(() => toast.classList.add('promptpro-toast--visible'));
-    setTimeout(() => {
-      toast.classList.remove('promptpro-toast--visible');
-      setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    startTimer();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1720,39 +1802,6 @@
     toneDropdown.appendChild(dropdownTrigger);
     toneDropdown.appendChild(dropdownMenu);
 
-    const stylePrefs = document.createElement('div');
-    stylePrefs.className = 'promptpro-style-prefs';
-    stylePrefs.id = 'promptpro-style-prefs';
-
-    const stylePrefsHeader = document.createElement('div');
-    stylePrefsHeader.className = 'promptpro-style-prefs__header';
-    stylePrefsHeader.setAttribute('role', 'button');
-    stylePrefsHeader.setAttribute('tabindex', '0');
-    stylePrefsHeader.innerHTML = `
-      <div class="promptpro-style-prefs__title-group">
-        <span class="promptpro-style-prefs__chevron">
-          <svg width="8" height="6" viewBox="0 0 8 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1.5L4 4.5L7 1.5"/></svg>
-        </span>
-        <span class="promptpro-section-title" style="margin:0;font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#94a3b8;">Style & preferences</span>
-      </div>
-      <span class="promptpro-style-prefs__badge" id="promptpro-current-tone-badge">${activeToneObj.label}</span>
-    `;
-
-    const stylePrefsBody = document.createElement('div');
-    stylePrefsBody.className = 'promptpro-style-prefs__body';
-    stylePrefsBody.style.display = 'none';
-
-    stylePrefsHeader.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const isOpen = stylePrefs.classList.toggle('promptpro-style-prefs--open');
-      stylePrefsBody.style.display = isOpen ? 'block' : 'none';
-    });
-
-    stylePrefsBody.appendChild(toneDropdown);
-    stylePrefs.appendChild(stylePrefsHeader);
-    stylePrefs.appendChild(stylePrefsBody);
-
     // ── F. Bottom Action Bar ──
     const actions = document.createElement('div');
     actions.className = 'promptpro-actions';
@@ -1777,7 +1826,7 @@
     popover.appendChild(preview);
     popover.appendChild(changeSummary);
     popover.appendChild(suggestionsContainer);
-    popover.appendChild(stylePrefs);
+    popover.appendChild(toneDropdown);
     popover.appendChild(actions);
 
     const container = document.createElement('div');
@@ -1849,7 +1898,7 @@
               strategy: appliedStrategy
             }
           });
-          showToast(`Prompt upgraded! (+${delta > 0 ? delta : 0})`, 'success');
+          showToast('Prompt upgraded', 'success', delta > 0 ? delta : null);
 
           // Phase 3: Wire preference memory learning loop
           if (appliedTone) {

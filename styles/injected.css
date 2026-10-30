@@ -6,8 +6,18 @@
    ═══════════════════════════════════════════════════════ */
 
 :root {
-  --pp-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --pp-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   --pp-font-mono: ui-monospace, SFMono-Regular, 'Cascadia Code', 'Roboto Mono', Menlo, monospace;
+  --pp-toast-bg: rgba(28, 28, 30, 0.72);
+  --pp-toast-border: rgba(255, 255, 255, 0.10);
+  --pp-toast-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --pp-toast-text: rgba(255, 255, 255, 0.92);
+  --pp-toast-success-badge: rgba(52, 199, 89, 0.18);
+  --pp-toast-success-stroke: #34C759;
+  --pp-toast-success-chip-bg: rgba(52, 199, 89, 0.14);
+  --pp-toast-success-chip-color: #34C759;
+  --pp-toast-error-badge: rgba(245, 166, 35, 0.18);
+  --pp-toast-error-stroke: #F5A623;
 }
 
 /* ── Container ──────────────────────────────────────── */
@@ -446,6 +456,7 @@ html[data-theme="light"] .promptpro-btn:hover,
   position: relative;
   outline: none;
   width: 100%;
+  margin-top: 8px;
   z-index: 20;
 }
 
@@ -851,44 +862,104 @@ html[data-theme="light"] .promptpro-btn:hover,
 
 
 
-/* ── Toast Notifications ─────────────────────────────── */
+/* ── Toast Notifications (Apple-Style Minimal Toast) ────── */
 
 .promptpro-toast {
   position: fixed;
   bottom: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  border-radius: 12px;
-  background: rgba(15, 15, 20, 0.9);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 500;
+  height: 44px;
+  padding: 10px 16px 10px 12px;
+  gap: 10px;
+  border-radius: 999px;
+  background: var(--pp-toast-bg);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--pp-toast-border);
+  box-shadow: var(--pp-toast-shadow);
+  color: var(--pp-toast-text);
   font-family: var(--pp-font-sans);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
-  z-index: 99999;
+  z-index: 2147483647;
+  box-sizing: border-box;
+  user-select: none;
+  pointer-events: auto;
   opacity: 0;
-  transition: all 300ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
-  pointer-events: none;
+  transform: translateX(-50%) translateY(12px) scale(0.96);
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .promptpro-toast--visible {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translateX(-50%) translateY(0) scale(1);
 }
 
-.promptpro-toast--error {
-  border-color: rgba(248, 81, 73, 0.4);
+.promptpro-toast--hiding {
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px) scale(0.98);
+  transition: transform 200ms ease-in, opacity 200ms ease-in;
 }
 
-.promptpro-toast--success {
-  border-color: rgba(46, 160, 67, 0.4);
+@media (prefers-reduced-motion: reduce) {
+  .promptpro-toast {
+    transform: translateX(-50%) !important;
+    transition: opacity 120ms ease !important;
+  }
+  .promptpro-toast--visible {
+    opacity: 1 !important;
+    transform: translateX(-50%) !important;
+  }
+  .promptpro-toast--hiding {
+    opacity: 0 !important;
+    transform: translateX(-50%) !important;
+  }
+}
+
+.promptpro-toast__icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--pp-toast-success-badge);
+  color: var(--pp-toast-success-stroke);
+}
+
+.promptpro-toast--error .promptpro-toast__icon-badge {
+  background: var(--pp-toast-error-badge);
+  color: var(--pp-toast-error-stroke);
+}
+
+.promptpro-toast__icon-badge svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.promptpro-toast__text {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--pp-toast-text);
+  white-space: nowrap;
+}
+
+.promptpro-toast__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--pp-toast-success-chip-bg);
+  color: var(--pp-toast-success-chip-color);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 /* ── Light Mode Adaptations ─────────────────────────── */
