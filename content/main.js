@@ -1458,7 +1458,7 @@
         <span>Rewrite Preview</span>
       </div>
       <div class="promptpro-header-right">
-        <span id="promptpro-auto-detect-badge" style="display:none;align-items:center;gap:4px;font-size:10px;font-weight:600;letter-spacing:0.03em;padding:2px 7px;border-radius:20px;background:rgba(139,92,246,0.15);color:#a78bfa;border:1px solid rgba(139,92,246,0.3);cursor:default;white-space:nowrap;"></span>
+        <span id="promptpro-auto-detect-badge" style="display:none;align-items:center;gap:4px;font-size:10px;font-weight:600;letter-spacing:0.03em;padding:2px 7px;border-radius:20px;background:rgba(255,255,255,0.12);color:#ffffff;border:1px solid rgba(255,255,255,0.22);cursor:default;white-space:nowrap;"></span>
         <span class="promptpro-word-count" id="promptpro-word-count"></span>
         <div class="promptpro-score-container" id="promptpro-score-container">
           <div class="promptpro-score-deltas" id="promptpro-score-deltas"></div>
@@ -2050,7 +2050,7 @@
         }
       }
 
-      const result = await requestRewrite(contextPayload, adapter.siteId, finalStrategy, finalToneText);
+      let result = await requestRewrite(contextPayload, adapter.siteId, finalStrategy, finalToneText);
 
       // Stale check
       if (requestId !== previewRequestId) return;
@@ -2063,7 +2063,8 @@
         result = {
           rewritten: localRewritten,
           original: STATE.originalText,
-          score: { before: bScore, after: aScore }
+          score: { before: bScore, after: aScore },
+          isLlmApi: false
         };
       }
       applyBtn.disabled = false;
@@ -2071,6 +2072,18 @@
       STATE.currentRewrite = result.rewritten;
       STATE.currentScore = result.score;
       applyBtn.disabled = false;
+
+      // Update engine truth indicator badge in change summary bar
+      const badgeEl = document.getElementById('promptpro-change-summary-badge');
+      if (badgeEl) {
+        if (result.isLlmApi) {
+          badgeEl.textContent = 'Frontier AI';
+          badgeEl.title = 'Optimized via backend LLM API';
+        } else {
+          badgeEl.textContent = 'Default Engine';
+          badgeEl.title = 'Optimized via local heuristic engine (free offline fallback)';
+        }
+      }
 
       // Update header word count comparison
       updateWordCountDisplay(STATE.originalText, STATE.currentRewrite);
@@ -2414,6 +2427,18 @@
 
       STATE.currentRewrite = result.rewritten;
       if (result.score) STATE.currentScore = result.score;
+
+      // Update engine truth indicator badge in change summary bar
+      const badgeEl = document.getElementById('promptpro-change-summary-badge');
+      if (badgeEl) {
+        if (result.isLlmApi) {
+          badgeEl.textContent = 'Frontier AI';
+          badgeEl.title = 'Optimized via backend LLM API';
+        } else {
+          badgeEl.textContent = 'Default Engine';
+          badgeEl.title = 'Optimized via local heuristic engine (free offline fallback)';
+        }
+      }
 
       updateWordCountDisplay(STATE.originalText, STATE.currentRewrite);
       renderPreviewContent();

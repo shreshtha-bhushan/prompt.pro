@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PromptPro — Background Service Worker (Phase 1)
  * 
  * Advanced prompt optimization engine with:
@@ -1336,21 +1336,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               try {
                 response = await fetch('https://prompt-pro-liart.vercel.app/api/upgrade', { method: 'POST', headers, body });
               } catch (_fbErr) {
-                return fallbackLocal(text, strategy, tone, lowTokenEnabled);
+                return { text: fallbackLocal(text, strategy, tone, lowTokenEnabled), isLlmApi: false };
               }
             } else {
-              return fallbackLocal(text, strategy, tone, lowTokenEnabled);
+              return { text: fallbackLocal(text, strategy, tone, lowTokenEnabled), isLlmApi: false };
             }
           }
 
           if (!response.ok) {
             console.warn(`[PromptPro] API returned HTTP ${response.status}, gracefully falling back to local optimization engine`);
-            return fallbackLocal(text, strategy, tone, lowTokenEnabled);
+            return { text: fallbackLocal(text, strategy, tone, lowTokenEnabled), isLlmApi: false };
           }
 
           const data = await response.json();
           if (!data.success && !data.rewritten) {
-            return fallbackLocal(text, strategy, tone, lowTokenEnabled);
+            return { text: fallbackLocal(text, strategy, tone, lowTokenEnabled), isLlmApi: false };
           }
           if (data.creditsBalance !== undefined) {
             chrome.storage.local.get(['entitlementSnapshot'], (snRes) => {
@@ -1365,15 +1365,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               }
             });
           }
-          return data.rewritten;
+          return { text: data.rewritten, isLlmApi: true };
         })();
       } else {
         console.log('[PromptPro] Using local fallback engine (Pro Optimization disabled in settings)');
-        rewrittenPromise = Promise.resolve(fallbackLocal(text, strategy, tone, lowTokenEnabled));
+        rewrittenPromise = Promise.resolve({ text: fallbackLocal(text, strategy, tone, lowTokenEnabled), isLlmApi: false });
       }
 
       Promise.all([rewrittenPromise, suggestionsPromise])
-        .then(([rewritten, suggestions]) => {
+        .then(([rewrittenResult, suggestions]) => {
+          const rewritten = (typeof rewrittenResult === 'object' && rewrittenResult !== null && 'text' in rewrittenResult)
+            ? rewrittenResult.text
+            : rewrittenResult;
+          const isLlmApi = (typeof rewrittenResult === 'object' && rewrittenResult !== null && 'isLlmApi' in rewrittenResult)
+            ? !!rewrittenResult.isLlmApi
+            : false;
           const afterScore = scorePrompt(rewritten);
           const diagnostics = getScoreDiagnostics(text, rewritten, beforeScore, afterScore);
 
@@ -1388,10 +1394,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             diagnostics,
             strategy,
             tone: tone || null,
+            isLlmApi,
             applied: true
           };
           cacheUpgradeSet(cKey, payload);
-          swTrack('optimization_run', { mode: selectedMode, source: 'extension', is_local: !openrouterEnabled, strategy, tone });
+          swTrack('optimization_run', { mode: selectedMode, source: 'extension', is_local: !isLlmApi, strategy, tone });
           sendResponse(payload);
         })
         .catch(err => {

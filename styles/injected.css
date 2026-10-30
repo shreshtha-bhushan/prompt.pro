@@ -590,9 +590,9 @@ html[data-theme="light"] .promptpro-btn:hover,
 .promptpro-change-summary__badge {
   font-size: 10px;
   font-weight: 500;
-  color: #c084fc;
-  background: rgba(192, 132, 252, 0.12);
-  border: 1px solid rgba(192, 132, 252, 0.25);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
   padding: 1px 6px;
 }
@@ -661,13 +661,13 @@ html[data-theme="light"] .promptpro-btn:hover,
 }
 
 .promptpro-suggestion-chip--active {
-  background: rgba(192, 132, 252, 0.16) !important;
-  border-color: rgba(192, 132, 252, 0.4) !important;
+  background: rgba(255, 255, 255, 0.18) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
   color: #ffffff !important;
 }
 
 .promptpro-suggestion-chip__sparkle {
-  color: #c084fc;
+  color: #ffffff;
   font-size: 11px;
   line-height: 1;
 }
@@ -775,16 +775,18 @@ html[data-theme="light"] .promptpro-btn:hover,
 }
 
 .promptpro-action-btn--apply {
-  background: #ffffff !important;
+  background: #000000 !important;
   border: 1px solid rgba(255, 255, 255, 0.25) !important;
-  color: #0a0a0a !important;
+  color: #ffffff !important;
   font-weight: 600 !important;
   padding: 0 18px !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35) !important;
 }
 
 .promptpro-action-btn--apply:hover {
-  background: #f1f5f9 !important;
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #0a0a0a !important;
   transform: translateY(-1px) !important;
   box-shadow: 0 4px 14px rgba(255, 255, 255, 0.25) !important;
 }

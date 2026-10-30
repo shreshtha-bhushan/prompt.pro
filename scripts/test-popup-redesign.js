@@ -100,10 +100,11 @@ test('CSS styles Apple-style pill suggestion chips',
   css.includes('border-radius: 999px')
 );
 
-test('CSS styles Apple-style primary white apply button', 
+test('CSS styles Apple-style primary apply button with black default and white hover', 
   css.includes('.promptpro-action-btn--apply') && 
-  css.includes('background: #ffffff') && 
-  css.includes('color: #0a0a0a')
+  css.includes('background: #000000') && 
+  css.includes('.promptpro-action-btn--apply:hover') &&
+  css.includes('background: #ffffff')
 );
 
 test('CSS styles secondary dark cancel button', 
