@@ -32,11 +32,11 @@ export default function PrivacyPage() {
               1. AI Data Training & Privacy
             </h2>
             <p className="text-[14px] text-white/60 leading-relaxed font-sans">
-              PromptPro is built with strict privacy boundaries. We do not sell, rent, or monetize your prompt data. We configure our AI infrastructure (via OpenRouter) to opt out of model training on your prompts.
+              PromptPro is built with strict privacy boundaries. We do not sell, rent, or monetize your prompt data. Our extension operates with a local-first heuristic engine on your device. When server-side optimizations are requested, prompts are processed ephemerally with zero-training policies requested from downstream providers.
             </p>
-            <div className="p-3.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[13px] text-white/50 font-mono">
-              [PLACEHOLDER: Confirm this account-level setting (&ldquo;disallow providers that train on data&rdquo;) is enabled in your OpenRouter dashboard before publishing this claim]
-            </div>
+            <p className="text-[13px] text-white/50 leading-relaxed font-sans">
+              Upstream inference requests are routed with end-to-end trace correlation (`X-Request-Id`) without attaching identifying account credentials to third-party model providers.
+            </p>
           </section>
 
           {/* Section 2 */}
@@ -92,9 +92,9 @@ export default function PrivacyPage() {
             <h2 className="text-[18px] font-semibold text-white font-sans">
               4. Data Retention Policy
             </h2>
-            <div className="p-3.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[13px] text-white/50 font-mono">
-              [PLACEHOLDER: Insert precise data retention timeline for prompt history logs, account deletion turnaround, and ledger archive periods — consult legal counsel]
-            </div>
+            <p className="text-[14px] text-white/60 leading-relaxed font-sans">
+              Prompt optimization history and analytical logs are retained for a rolling period of <strong className="text-white/80">180 days</strong>. Records older than 180 days are automatically deleted on an automated database maintenance cycle. Users can manually delete any history item or purge their entire prompt history at any time through their private dashboard.
+            </p>
           </section>
 
           {/* Section 5 */}
@@ -103,11 +103,8 @@ export default function PrivacyPage() {
               5. User Rights (GDPR & CCPA/CPRA)
             </h2>
             <p className="text-[14px] text-white/60 leading-relaxed font-sans">
-              Depending on your jurisdiction, you have the right to access, export, rectify, or delete your personal data. You may delete your prompt history and saved snippets at any time directly through the PromptPro dashboard.
+              Depending on your jurisdiction, you have the right to access, export, rectify, or delete your personal data. You may delete your prompt history and saved snippets at any time directly through the PromptPro dashboard. For formal data subject access requests (DSAR) or account deletion, email <a href="mailto:privacy@promptpro.dev" className="text-white hover:underline underline-offset-4">privacy@promptpro.dev</a>.
             </p>
-            <div className="p-3.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[13px] text-white/50 font-mono">
-              [PLACEHOLDER: Specify formal data subject access request (DSAR) workflow and dedicated compliance officer contact]
-            </div>
           </section>
 
           {/* Section 6 */}

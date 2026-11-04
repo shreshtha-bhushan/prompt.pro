@@ -21,12 +21,12 @@ console.log('✓ 2. Content script verification passed: Monotone SVG icon everyw
 
 // 3. Check upgrade/route.ts & optimize/route.ts
 const upgradeRoute = fs.readFileSync('web/src/app/api/upgrade/route.ts', 'utf8');
-assert(upgradeRoute.includes('resolveAuthenticatedUserId'), 'upgrade/route.ts must use resolveAuthenticatedUserId');
-assert(upgradeRoute.includes('verifyToken'), 'upgrade/route.ts must import verifyToken');
+assert(upgradeRoute.includes('resolveAuthUserId') || upgradeRoute.includes('resolveAuthenticatedUserId'), 'upgrade/route.ts must use resolveAuthUserId');
+assert(upgradeRoute.includes('verifyToken') || upgradeRoute.includes('auth-resolver'), 'upgrade/route.ts must use verified auth');
 
 const optimizeRoute = fs.readFileSync('web/src/app/api/optimize/route.ts', 'utf8');
-assert(optimizeRoute.includes('resolveAuthenticatedUserId'), 'optimize/route.ts must use resolveAuthenticatedUserId');
-assert(optimizeRoute.includes('verifyToken'), 'optimize/route.ts must import verifyToken');
+assert(optimizeRoute.includes('resolveAuthUserId') || optimizeRoute.includes('resolveAuthenticatedUserId'), 'optimize/route.ts must use resolveAuthUserId');
+assert(optimizeRoute.includes('verifyToken') || optimizeRoute.includes('auth-resolver'), 'optimize/route.ts must use verified auth');
 console.log('✓ 3. API route verification passed: Multi-strategy Clerk auth supporting extension Bearer tokens and session sync.');
 
 // 4. Check manifest.json

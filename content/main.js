@@ -15,6 +15,39 @@
   'use strict';
 
   // ═══════════════════════════════════════════════════════════
+  // Scoped DOM Query Interceptors for Shadow DOM Isolation (Batch 2)
+  // ═══════════════════════════════════════════════════════════
+
+  const _origGetElementById = document.getElementById.bind(document);
+  const _origQuerySelector = document.querySelector.bind(document);
+
+  document.getElementById = function (id) {
+    if (_promptProShadowRoot) {
+      const el = _promptProShadowRoot.getElementById(id);
+      if (el) return el;
+    }
+    const host = _origGetElementById('promptpro-host');
+    if (host && host.shadowRoot) {
+      const el = host.shadowRoot.getElementById(id);
+      if (el) return el;
+    }
+    return _origGetElementById(id);
+  };
+
+  document.querySelector = function (selector) {
+    if (_promptProShadowRoot && typeof selector === 'string' && selector.includes('promptpro-')) {
+      const el = _promptProShadowRoot.querySelector(selector);
+      if (el) return el;
+    }
+    const host = _origGetElementById('promptpro-host');
+    if (host && host.shadowRoot && typeof selector === 'string' && selector.includes('promptpro-')) {
+      const el = host.shadowRoot.querySelector(selector);
+      if (el) return el;
+    }
+    return _origQuerySelector(selector);
+  };
+
+  // ═══════════════════════════════════════════════════════════
   // Constants
   // ═══════════════════════════════════════════════════════════
 
@@ -53,6 +86,74 @@
     listenersRegistered: false, // Fix 5: register once
     lastUrl: location.href      // Fix 6: SPA detection
   };
+
+  // ═══════════════════════════════════════════════════════════
+  // Shadow DOM Host & Encapsulation (Batch 2)
+  // ═══════════════════════════════════════════════════════════
+
+  let _promptProHost = null;
+  let _promptProShadowRoot = null;
+
+  function ensurePromptProHost() {
+    if (_promptProHost && _promptProHost.isConnected && _promptProShadowRoot) {
+      return _promptProShadowRoot;
+    }
+
+    let host = _origGetElementById('promptpro-host');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'promptpro-host';
+      host.setAttribute('data-promptpro-host', 'true');
+      host.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647;pointer-events:none;overflow:visible;border:none;margin:0;padding:0;';
+      const root = document.body || document.documentElement;
+      if (root) {
+        root.appendChild(host);
+      } else {
+        document.addEventListener('DOMContentLoaded', () => {
+          if (!host.isConnected) (document.body || document.documentElement)?.appendChild(host);
+        });
+      }
+    }
+
+    let shadow = host.shadowRoot;
+    if (!shadow) {
+      try {
+        shadow = host.attachShadow({ mode: 'open' });
+      } catch (_e) {
+        shadow = host.shadowRoot;
+      }
+    }
+
+    if (shadow && !shadow.getElementById('promptpro-shadow-style')) {
+      try {
+        const link = document.createElement('link');
+        link.id = 'promptpro-shadow-stylesheet';
+        link.rel = 'stylesheet';
+        link.type = 'text/css';
+        link.href = chrome.runtime.getURL('styles/injected.css');
+        shadow.appendChild(link);
+      } catch (_e) {}
+
+      const style = document.createElement('style');
+      style.id = 'promptpro-shadow-style';
+      shadow.appendChild(style);
+
+      try {
+        fetch(chrome.runtime.getURL('styles/injected.css'))
+          .then(res => res.text())
+          .then(css => {
+            if (css && style.isConnected) {
+              style.textContent = css;
+            }
+          })
+          .catch(() => {});
+      } catch (_e) {}
+    }
+
+    _promptProHost = host;
+    _promptProShadowRoot = shadow;
+    return shadow;
+  }
 
   // ═══════════════════════════════════════════════════════════
   // Element Cache (Fix 7)
@@ -1016,7 +1117,12 @@
       }, 200);
     }
 
-    document.body.appendChild(toast);
+    const shadow = ensurePromptProHost();
+    if (shadow) {
+      shadow.appendChild(toast);
+    } else {
+      document.body.appendChild(toast);
+    }
     requestAnimationFrame(() => toast.classList.add('promptpro-toast--visible'));
     startTimer();
   }
@@ -1452,8 +1558,10 @@
     if (!usePopoverPortal(adapter)) return;
     const pop = document.getElementById(IDS.POPOVER);
     if (!pop) return;
-    if (!pop.isConnected || pop.parentElement !== document.body) {
-      document.body.appendChild(pop);
+    const shadow = ensurePromptProHost();
+    if (!pop.isConnected || (shadow ? pop.parentNode !== shadow : pop.parentElement !== document.body)) {
+      if (shadow) shadow.appendChild(pop);
+      else document.body.appendChild(pop);
     }
     applyPopoverStyles(pop);
     pop.style.display = 'flex';
@@ -1853,13 +1961,20 @@
     container.style.margin = '0 4px';
     container.appendChild(btn);
 
-    // Keep popover attached directly to document.body (hidden), NOT inside container/<form>
+    // Keep popover attached directly to Shadow DOM root (hidden), NOT inside container/<form>
     popover.style.display = 'none';
-    if (document.body) {
+    const shadow = ensurePromptProHost();
+    if (shadow) {
+      if (popover.parentNode !== shadow) shadow.appendChild(popover);
+    } else if (document.body) {
       document.body.appendChild(popover);
     } else {
       document.addEventListener('DOMContentLoaded', () => {
-        if (!popover.isConnected && document.body) document.body.appendChild(popover);
+        const s = ensurePromptProHost();
+        if (!popover.isConnected) {
+          if (s) s.appendChild(popover);
+          else if (document.body) document.body.appendChild(popover);
+        }
       });
     }
 
@@ -3158,7 +3273,12 @@
         slashMenu = document.createElement('div');
         slashMenu.id = 'promptpro-slash-menu';
         slashMenu.className = 'promptpro-slash-menu';
-        document.body.appendChild(slashMenu);
+        const shadow = ensurePromptProHost();
+        if (shadow) {
+          shadow.appendChild(slashMenu);
+        } else {
+          document.body.appendChild(slashMenu);
+        }
 
         // ── Separate library items from context blocks ──
         // These are intentionally kept as distinct categories.
@@ -3489,7 +3609,8 @@
 
       // Dismiss menu on click away
       document.addEventListener('click', (e) => {
-        if (isSlashOpen && slashMenu && !slashMenu.contains(e.target)) {
+        const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+        if (isSlashOpen && slashMenu && !slashMenu.contains(e.target) && !path.includes(slashMenu)) {
           closeSlashMenu();
         }
       }, { capture: true });
@@ -3509,8 +3630,9 @@
         if (!STATE.isOpen) return;
         const pop = document.getElementById(IDS.POPOVER);
         const container = document.getElementById(IDS.BTN)?.closest('.promptpro-container');
-        const inPop = pop && pop.contains(e.target);
-        const inContainer = container && container.contains(e.target);
+        const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+        const inPop = (pop && pop.contains(e.target)) || (pop && path.includes(pop));
+        const inContainer = (container && container.contains(e.target)) || (container && path.includes(container));
         if (!inPop && !inContainer) {
           closePopover();
         }
@@ -3519,7 +3641,8 @@
       // Outside click → close tone dropdown
       document.addEventListener('click', (e) => {
         const dropdown = document.querySelector('.promptpro-dropdown--open');
-        if (dropdown && !dropdown.contains(e.target)) {
+        const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+        if (dropdown && !dropdown.contains(e.target) && !path.includes(dropdown)) {
           dropdown.classList.remove('promptpro-dropdown--open');
         }
       }, { capture: true });
@@ -3831,7 +3954,12 @@
     modal.appendChild(body);
     modal.appendChild(footer);
     backdrop.appendChild(modal);
-    document.body.appendChild(backdrop);
+    const shadow = ensurePromptProHost();
+    if (shadow) {
+      shadow.appendChild(backdrop);
+    } else {
+      document.body.appendChild(backdrop);
+    }
     activeVariablesModal = backdrop;
 
     const previewBox = modal.querySelector('#promptpro-vars-preview-box');

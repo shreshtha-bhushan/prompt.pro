@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "PromptPro",
   "version": "1.0.0",
-  "description": "Upgrade your prompts across ChatGPT, Claude, and Gemini — local-first, zero data leakage",
+  "description": "Upgrade your prompts across ChatGPT, Claude, Gemini, and Perplexity — local-first, zero data leakage",
   "homepage_url": "https://prompt-pro-liart.vercel.app/privacy",
   "permissions": ["storage", "activeTab", "tabs", "cookies"],
   "background": {
