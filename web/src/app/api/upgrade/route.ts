@@ -11,6 +11,8 @@
  *   7. Injection-resistant prompt formatting
  *   8. Masked error responses (no leaking upstream or internal stack details)
  *   9. Scoped CORS headers
+ *  10. End-to-end request ID trace correlation (x-request-id)
+ *  11. Resilient OpenRouter calls with exponential backoff retry
  */
 
 import type { NextRequest } from "next/server";
@@ -29,6 +31,8 @@ import { ensureProfile } from "@/lib/entitlement";
 import { rateLimit, buildRateLimitResponse } from "@/lib/ratelimit";
 import { upgradeSchema } from "@/lib/validations/api";
 import { getCorsHeaders, handleOptions } from "@/lib/cors";
+import { resolveRequestId, logPrefix } from "@/lib/request-id";
+import { callOpenRouter } from "@/lib/openrouter";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +101,11 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request);
+  const requestId = resolveRequestId(request);
+  const lp = (msg: string) => logPrefix(requestId, "/api/upgrade") + " " + msg;
+
+  // Attach request ID to all responses
+  corsHeaders["x-request-id"] = requestId;
 
   // ── 1. Authentication ─────────────────────────────────────
   const userId = await resolveAuthUserId(request);
@@ -146,7 +155,7 @@ export async function POST(request: NextRequest) {
     const user = await client.users.getUser(userId);
     isAdmin = getRole(user) === "admin";
   } catch (err) {
-    console.error("[/api/upgrade] Error checking admin metadata:", err);
+    console.error(lp("Error checking admin metadata:"), err);
   }
 
   const supabase = getAdminClient();
@@ -211,7 +220,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (spendErr.message?.includes("profile_not_found")) {
-        console.warn("[/api/upgrade] spend_credits reported profile_not_found — ensuring profile and retrying...");
+        console.warn(lp("spend_credits reported profile_not_found — ensuring profile and retrying..."));
         await ensureProfile(userId);
         const retryRpc = await supabase.rpc("spend_credits", {
           p_clerk_id: userId,
@@ -221,7 +230,7 @@ export async function POST(request: NextRequest) {
         if (!retryRpc.error) {
           newBalance = retryRpc.data as number;
         } else {
-          console.error("[/api/upgrade] Retry spend failed:", retryRpc.error);
+          console.error(lp("Retry spend failed:"), retryRpc.error);
           return NextResponse.json(
             {
               error: "db_error",
@@ -232,7 +241,7 @@ export async function POST(request: NextRequest) {
           );
         }
       } else {
-        console.error("[/api/upgrade] spend_credits RPC error:", spendErr);
+        console.error(lp("spend_credits RPC error:"), spendErr);
         return NextResponse.json(
           {
             error: "db_error",
@@ -247,8 +256,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── 7. Execute AI Optimization with Provider Error Sanitization ──
-  // Only the API key from the server code runs all upgradations
+  // ── 7. Execute AI Optimization via Resilient OpenRouter Client ──
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     const synthesized = synthesizePromptUpgrade(text, strategy, tone, lowTokenEnabled, noFluff);
@@ -297,128 +305,24 @@ CRITICAL INSTRUCTION:
     systemPrompt += "\n\nLow Token Directive: Compact all expressions for minimum prompt token length using concise bullet formatting. Never eliminate crucial task specifications, code, or parameters.";
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000);
+  // Use resilient OpenRouter client with retry + backoff
+  const result = await callOpenRouter(
+    {
+      model: selectedModel,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `<user_input_prompt>\n${text}\n</user_input_prompt>` },
+      ],
+      temperature: 0.3,
+      max_tokens: lowTokenEnabled ? 1024 : 2048,
+    },
+    requestId
+  );
 
-  try {
-    const openrouterResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-        "HTTP-Referer": "https://github.com/shreshtha-bhushan/prompt.pro",
-        "X-Title": "PromptPro Upgrade API",
-      },
-      body: JSON.stringify({
-        model: selectedModel,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `<user_input_prompt>\n${text}\n</user_input_prompt>` },
-        ],
-        temperature: 0.3,
-        max_tokens: lowTokenEnabled ? 1024 : 2048,
-      }),
-    });
+  if (!result.ok) {
+    console.error(lp(`OpenRouter failed: ${result.code} (HTTP ${result.status})`));
 
-    if (!openrouterResponse.ok) {
-      const errJson = await openrouterResponse.json().catch(() => ({}));
-      const rawMsg = errJson?.error?.message || errJson?.error?.metadata?.raw || "";
-      const status = openrouterResponse.status;
-
-      let userMessage = `AI provider error (HTTP ${status}).`;
-      let errorCode = "OPT_PROVIDER_ERROR";
-
-      if (status === 429) {
-        userMessage = rawMsg.includes("rate-limited")
-          ? `${selectedModel} is temporarily rate-limited upstream. Please retry in a few moments.`
-          : "Optimization request was rate-limited by the AI provider. Please retry shortly.";
-        errorCode = "PROVIDER_RATE_LIMITED";
-      } else if (status === 401 || status === 403) {
-        userMessage = "AI provider authentication failed. Please verify API configuration.";
-        errorCode = "PROVIDER_AUTH_FAILED";
-      } else if (status === 402) {
-        userMessage = "AI provider payment/credits limit reached.";
-        errorCode = "PROVIDER_CREDIT_LIMIT";
-      } else if (status >= 500) {
-        userMessage = "AI provider service is temporarily unavailable. Please retry in a moment.";
-        errorCode = "PROVIDER_UNAVAILABLE";
-      }
-
-      // Refund deducted credits
-      if (!isAdmin) {
-        try {
-          await supabase.rpc("spend_credits", {
-            p_clerk_id: userId,
-            p_amount: -cost,
-            p_reason: `${mode}_optimize_refund`,
-          });
-        } catch (refundErr) {
-          console.error("[/api/upgrade] Refund failed:", refundErr);
-        }
-      }
-
-      return NextResponse.json(
-        {
-          error: "optimization_failed",
-          message: userMessage,
-          code: errorCode,
-          model: selectedModel,
-          status,
-        },
-        { status: status >= 400 && status < 600 ? status : 502, headers: corsHeaders }
-      );
-    }
-
-    const completion = await openrouterResponse.json();
-    const aiText = completion.choices?.[0]?.message?.content;
-
-    if (!aiText || typeof aiText !== "string" || aiText.trim().length === 0) {
-      // Refund deducted credits
-      if (!isAdmin) {
-        try {
-          await supabase.rpc("spend_credits", {
-            p_clerk_id: userId,
-            p_amount: -cost,
-            p_reason: `${mode}_optimize_refund`,
-          });
-        } catch (refundErr) {
-          console.error("[/api/upgrade] Refund failed:", refundErr);
-        }
-      }
-
-      return NextResponse.json(
-        {
-          error: "empty_response",
-          message: "AI provider returned an empty completion. Credits have been refunded.",
-          code: "OPT_EMPTY_RESPONSE",
-          model: selectedModel,
-        },
-        { status: 502, headers: corsHeaders }
-      );
-    }
-
-    let cleanText = aiText.trim();
-    if (noFluff) {
-      if (cleanText.startsWith("```") && cleanText.endsWith("```")) {
-        cleanText = cleanText.replace(/^```[a-zA-Z]*\n/, "").replace(/\n```$/, "");
-      }
-      cleanText = cleanText.replace(/^(here is|here's|sure, here is|sure, here's) the (enhanced|rewritten|optimized|upgraded)? prompt:?\n*/i, "");
-    }
-
-    return NextResponse.json(
-      {
-        success: true,
-        rewritten: cleanText.trim(),
-        creditsBalance: newBalance,
-        model: selectedModel,
-      },
-      { status: 200, headers: corsHeaders }
-    );
-  } catch (err: unknown) {
-    console.error("[/api/upgrade] Optimization execution failed:", err);
-
-    // Automatic refund on failure
+    // Automatic credit refund on failure
     if (!isAdmin) {
       try {
         await supabase.rpc("spend_credits", {
@@ -427,25 +331,30 @@ CRITICAL INSTRUCTION:
           p_reason: `${mode}_optimize_refund`,
         });
       } catch (refundErr) {
-        console.error("[/api/upgrade] Refund failed:", refundErr);
+        console.error(lp("Refund failed:"), refundErr);
       }
     }
-
-    const isTimeout = (err as Error)?.name === "AbortError";
-    const msg = isTimeout
-      ? "AI provider request timed out (20s). Any deducted credits have been refunded."
-      : "Failed to connect to AI provider. Any deducted credits have been refunded.";
 
     return NextResponse.json(
       {
         error: "optimization_failed",
-        message: msg,
-        code: isTimeout ? "OPT_TIMEOUT" : "OPT_NETWORK_ERROR",
+        message: result.message + " Any deducted credits have been refunded.",
+        code: result.code,
         model: selectedModel,
+        requestId,
       },
-      { status: 504, headers: corsHeaders }
+      { status: result.status >= 400 && result.status < 600 ? result.status : 502, headers: corsHeaders }
     );
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  return NextResponse.json(
+    {
+      success: true,
+      rewritten: result.content,
+      creditsBalance: newBalance,
+      model: selectedModel,
+      requestId,
+    },
+    { status: 200, headers: corsHeaders }
+  );
 }

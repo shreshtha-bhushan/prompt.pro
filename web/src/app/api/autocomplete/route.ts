@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { resolveAuthUserId } from "@/lib/auth-resolver";
 import { rateLimit, buildRateLimitResponse } from "@/lib/ratelimit";
 import { getCorsHeaders, handleOptions } from "@/lib/cors";
+import { resolveRequestId } from "@/lib/request-id";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,8 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request);
+  const requestId = resolveRequestId(request);
+  corsHeaders["x-request-id"] = requestId;
 
   try {
     // 1. Authentication Check

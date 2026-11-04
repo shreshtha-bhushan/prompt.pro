@@ -12,6 +12,8 @@
  *   8. Prompt injection delimiters and guardrails
  *   9. Error response sanitization (no internal/upstream error leakage)
  *  10. Strict CORS allowlisting
+ *  11. End-to-end request ID trace correlation (x-request-id)
+ *  12. Resilient OpenRouter calls with exponential backoff retry
  */
 
 import type { NextRequest } from "next/server";
@@ -31,6 +33,8 @@ import { getPostHogClient, shutdownPosthog } from "@/lib/posthog-server";
 import { rateLimit, buildRateLimitResponse } from "@/lib/ratelimit";
 import { optimizeSchema } from "@/lib/validations/api";
 import { getCorsHeaders, handleOptions } from "@/lib/cors";
+import { resolveRequestId, logPrefix } from "@/lib/request-id";
+import { callOpenRouter } from "@/lib/openrouter";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +54,11 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request);
+  const requestId = resolveRequestId(request);
+  const lp = (msg: string) => logPrefix(requestId, "/api/optimize") + " " + msg;
+
+  // Attach request ID to all responses
+  corsHeaders["x-request-id"] = requestId;
 
   // ── 1. Authentication ─────────────────────────────────────
   const userId = await resolveAuthUserId(request);
@@ -98,7 +107,7 @@ export async function POST(request: NextRequest) {
     const user = await client.users.getUser(userId);
     isAdmin = getRole(user) === "admin";
   } catch (err) {
-    console.error("[/api/optimize] Error reading Clerk user metadata:", err);
+    console.error(lp("Error reading Clerk user metadata:"), err);
   }
 
   // ── 5. Profile Fetch & Tier Verification ──────────────────
@@ -206,7 +215,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (spendErr.message?.includes("profile_not_found")) {
-        console.warn("[/api/optimize] spend_credits reported profile_not_found — ensuring profile and retrying...");
+        console.warn(lp("spend_credits reported profile_not_found — ensuring profile and retrying..."));
         await ensureProfile(userId);
         const retryRpc = await supabase.rpc("spend_credits", {
           p_clerk_id: userId,
@@ -216,7 +225,7 @@ export async function POST(request: NextRequest) {
         if (!retryRpc.error) {
           newBalance = retryRpc.data as number;
         } else {
-          console.error("[/api/optimize] Retry spend failed:", retryRpc.error);
+          console.error(lp("Retry spend failed:"), retryRpc.error);
           return NextResponse.json(
             {
               error: "db_error",
@@ -227,7 +236,7 @@ export async function POST(request: NextRequest) {
           );
         }
       } else {
-        console.error("[/api/optimize] spend_credits RPC error:", spendErr);
+        console.error(lp("spend_credits RPC error:"), spendErr);
         return NextResponse.json(
           {
             error: "db_error",
@@ -242,12 +251,11 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── 7. Run AI Optimization with Safe Error Handling ───────
-  let result: string;
-  try {
-    result = await runOptimization(prompt, mode);
-  } catch (err: unknown) {
-    console.error("[/api/optimize] LLM execution failure:", err);
+  // ── 7. Run AI Optimization via Resilient OpenRouter Client ───────
+  const optimizationResult = await runOptimization(prompt, mode, requestId);
+
+  if (!optimizationResult.ok) {
+    console.error(lp(`OpenRouter failed: ${optimizationResult.code} (HTTP ${optimizationResult.status})`));
 
     // Automatic credit refund on downstream LLM failure
     if (!isAdmin) {
@@ -258,7 +266,7 @@ export async function POST(request: NextRequest) {
           p_reason: `${REASON_BY_MODE[mode]}_refund`,
         });
       } catch (refundErr) {
-        console.error("[/api/optimize] Failed to refund credits:", refundErr);
+        console.error(lp("Failed to refund credits:"), refundErr);
       }
     }
 
@@ -266,17 +274,18 @@ export async function POST(request: NextRequest) {
     posthog.capture({
       distinctId: userId,
       event: "optimization_failed",
-      properties: { mode, error_type: "LLM_PROVIDER_ERROR" },
+      properties: { mode, error_type: optimizationResult.code, requestId },
     });
     await shutdownPosthog();
 
     return NextResponse.json(
       {
         error: "optimization_failed",
-        message: "Failed to optimize prompt with AI provider. Credits have been refunded.",
-        code: "OPT_PROVIDER_ERROR",
+        message: optimizationResult.message + " Credits have been refunded.",
+        code: optimizationResult.code,
+        requestId,
       },
-      { status: 502, headers: corsHeaders }
+      { status: optimizationResult.status >= 400 && optimizationResult.status < 600 ? optimizationResult.status : 502, headers: corsHeaders }
     );
   }
 
@@ -285,16 +294,17 @@ export async function POST(request: NextRequest) {
   posthog.capture({
     distinctId: userId,
     event: "optimization_run",
-    properties: { mode, credits_balance: newBalance, cost, source: "api" },
+    properties: { mode, credits_balance: newBalance, cost, source: "api", requestId },
   });
   await shutdownPosthog();
 
   return NextResponse.json(
     {
       success: true,
-      result,
-      rewritten: result,
+      result: optimizationResult.content,
+      rewritten: optimizationResult.content,
       creditsBalance: newBalance,
+      requestId,
     },
     { headers: corsHeaders }
   );
@@ -303,10 +313,13 @@ export async function POST(request: NextRequest) {
 /**
  * Execute optimization with prompt injection delimiters and OpenRouter integration
  */
+import type { OpenRouterResult } from "@/lib/openrouter";
+
 async function runOptimization(
   prompt: string,
-  mode: OptimizationMode
-): Promise<string> {
+  mode: OptimizationMode,
+  requestId: string
+): Promise<OpenRouterResult> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     const lower = prompt.toLowerCase();
@@ -324,7 +337,12 @@ async function runOptimization(
       constraints = "Ground all claims in analytical rigor, highlight hidden assumptions, and address high-impact risks.";
     }
 
-    return `**Role:**\n${role}\n\n**Task:**\nProvide an exhaustive, high-fidelity response optimized via PromptPro ${mode.toUpperCase()} engine:\n"${prompt}"\n\n**Output Format:**\n${format}\n\n**Quality Constraints:**\n${constraints}`;
+    return {
+      ok: true,
+      content: `**Role:**\n${role}\n\n**Task:**\nProvide an exhaustive, high-fidelity response optimized via PromptPro ${mode.toUpperCase()} engine:\n"${prompt}"\n\n**Output Format:**\n${format}\n\n**Quality Constraints:**\n${constraints}`,
+      model: "local-fallback",
+      requestId,
+    };
   }
 
   const modelMap: Record<OptimizationMode, string> = {
@@ -354,61 +372,15 @@ SECURITY & EXECUTION RULES:
 
   const userContent = `<user_input_prompt>\n${prompt}\n</user_input_prompt>`;
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
-
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-        "HTTP-Referer": "https://github.com/shreshtha-bhushan/prompt.pro",
-        "X-Title": "PromptPro Optimize API",
-      },
-      body: JSON.stringify({
-        model: selectedModel,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent },
-        ],
-        temperature: 0.3,
-      }),
-    });
-
-    if (!response.ok) {
-      const errJson = await response.json().catch(() => ({}));
-      const rawMsg = errJson?.error?.message || errJson?.error?.metadata?.raw || "";
-      const status = response.status;
-      let msg = `AI provider error (HTTP ${status})`;
-      if (status === 429) {
-        msg = rawMsg.includes("rate-limited")
-          ? `${selectedModel} is temporarily rate-limited upstream. Please retry in a few moments.`
-          : "Optimization request was rate-limited by the AI provider.";
-      } else if (status === 401 || status === 403) {
-        msg = "AI provider authentication failed.";
-      }
-      const customErr = new Error(msg);
-      (customErr as any).status = status;
-      (customErr as any).code = status === 429 ? "PROVIDER_RATE_LIMITED" : "OPT_PROVIDER_ERROR";
-      throw customErr;
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content || typeof content !== "string" || content.trim().length === 0) {
-      throw new Error("OpenRouter returned empty content");
-    }
-
-    let cleaned = content.trim();
-    if (cleaned.startsWith("```") && cleaned.endsWith("```")) {
-      cleaned = cleaned.replace(/^```[a-zA-Z]*\n/, "").replace(/\n```$/, "").trim();
-    }
-
-    return cleaned;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  return callOpenRouter(
+    {
+      model: selectedModel,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      temperature: 0.3,
+    },
+    requestId
+  );
 }

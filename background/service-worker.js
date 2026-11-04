@@ -1311,8 +1311,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             tokenToSend = await getCookieToken();
           }
 
+          // Generate client-side request ID for end-to-end trace correlation
+          const requestId = 'pp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+
           const headers = {
             'Content-Type': 'application/json',
+            'X-Request-Id': requestId,
             ...(tokenToSend ? { 'Authorization': `Bearer ${tokenToSend}` } : {})
           };
 
