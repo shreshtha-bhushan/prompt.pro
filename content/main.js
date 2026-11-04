@@ -120,7 +120,9 @@
       const isSidebar = walk.matches?.('aside, [data-testid*="sidebar"], nav')
         || walk.closest?.('aside, [data-testid*="sidebar"], nav');
       if (!isSidebar) {
-        const editor = walk.querySelector('#prompt-textarea, [contenteditable="true"], [contenteditable="plaintext-only"], div[role="textbox"], textarea');
+        const editor = walk.querySelector(
+          '#prompt-textarea, div.ProseMirror, [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable]:not([contenteditable="false"]), div[role="textbox"], textarea'
+        );
         if (editor) {
           return walk;
         }
@@ -529,13 +531,18 @@
       return {
         input: [
           // ProseMirror contenteditable — Claude's primary editor
+          'div.ProseMirror[contenteditable="true"]',
+          'div.ProseMirror[contenteditable]',
+          'div.ProseMirror',
           'div[contenteditable="true"].ProseMirror',
           'div[contenteditable="true"][data-placeholder]',
           'div[contenteditable="true"][aria-label*="Write" i]',
           'div[contenteditable="true"][aria-label*="Claude" i]',
-          'div[contenteditable="true"]',
-          '[contenteditable="true"]',
-          'div[role="textbox"]'
+          'div[contenteditable]:not([contenteditable="false"])',
+          'div[contenteditable="plaintext-only"]',
+          '[contenteditable]:not([contenteditable="false"])',
+          'div[role="textbox"]',
+          'textarea'
         ],
         toolbar: [
           'div[class*="flex"]:has(button[aria-label*="voice" i], button[aria-label*="mic" i])',
@@ -552,7 +559,12 @@
           'button[type="submit"]',
           // Claude voice/mic button when send button is absent in empty state:
           'button[aria-label*="mic" i]',
-          'button[aria-label*="voice" i]'
+          'button[aria-label*="voice" i]',
+          'button[aria-label*="dictat" i]',
+          'button[aria-label*="speech" i]',
+          'button[aria-label*="audio" i]',
+          'button[data-testid*="mic"]',
+          'button[data-testid*="voice"]'
         ]
       };
     }
@@ -570,19 +582,21 @@
       const btn = document.getElementById(IDS.BTN);
       const composer = findClosestComposer(btn);
       if (composer) {
-        const ce = composer.querySelector('div[contenteditable="true"].ProseMirror, div[contenteditable="true"], [contenteditable="true"], div[role="textbox"]');
+        const ce = composer.querySelector(
+          'div.ProseMirror, div[contenteditable]:not([contenteditable="false"]), [contenteditable]:not([contenteditable="false"]), div[role="textbox"], textarea'
+        );
         if (ce) return ce;
       }
 
       // 3. Fallback: Query within <main> element, preferring bottom-most editor (to avoid message history edit boxes)
       const main = document.querySelector('main, [role="main"]') || document.body;
       const editors = main.querySelectorAll(
-        'div[contenteditable="true"].ProseMirror, div[contenteditable="true"][data-placeholder], div[contenteditable="true"], [contenteditable="true"], div[role="textbox"]'
+        'div.ProseMirror, .ProseMirror, [data-placeholder*="Write" i], [aria-label*="Write" i], div[contenteditable="true"][data-placeholder], div[contenteditable]:not([contenteditable="false"]), div[contenteditable="plaintext-only"], [contenteditable]:not([contenteditable="false"]), div[role="textbox"], textarea'
       );
       for (let i = editors.length - 1; i >= 0; i--) {
         const el = editors[i];
         if (!el.closest('aside, [data-testid*="sidebar"], nav')) {
-          return el;
+          return el.isContentEditable ? el : (el.closest('.ProseMirror, [contenteditable="true"]') || el);
         }
       }
 
@@ -598,35 +612,52 @@
       const input = this.getInputField();
       if (!input) return null;
 
-      // Find enclosing composer container (can be fieldset, form, or div wrapper)
-      let composer = input.closest('fieldset, form, [data-testid*="composer"], div[class*="composer"]');
-      if (!composer) {
-        let cur = input.parentElement;
-        for (let i = 0; i < 8 && cur && cur !== document.body; i++) {
-          const btns = cur.querySelectorAll('button');
-          if (btns.length > 0) {
-            composer = cur;
-            if (btns.length >= 2 || cur.querySelector('button[aria-label*="voice" i], button[aria-label*="mic" i], button[aria-label*="Send" i], button[aria-label*="Attach" i]')) {
-              break;
-            }
+      // 1. Find the immediate input pill / composer wrapper enclosing the input and its action buttons
+      let pill = input.parentElement;
+      let foundPill = null;
+      for (let i = 0; i < 6 && pill && pill !== document.body; i++) {
+        const btns = pill.querySelectorAll('button:not([data-promptpro]):not([id*="promptpro"])');
+        if (btns.length > 0) {
+          foundPill = pill;
+          break;
+        }
+        pill = pill.parentElement;
+      }
+
+      const composer = foundPill || input.closest('fieldset, form, [data-testid*="composer"], div[class*="composer"]') || input.parentElement;
+
+      // 2. Locate buttons following the input editor (right-hand controls: mic, waveform, send, etc.)
+      const allBtns = Array.from(composer.querySelectorAll('button:not([data-promptpro]):not([id*="promptpro"])'));
+      const rightBtns = allBtns.filter(b => {
+        try {
+          if (typeof input.compareDocumentPosition === 'function' && typeof Node !== 'undefined' && Node.DOCUMENT_POSITION_FOLLOWING) {
+            return (input.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
           }
-          cur = cur.parentElement;
+        } catch { /* fallback */ }
+        return !b.matches('button[aria-label*="attach" i], button[aria-label*="upload" i], button[aria-label*="add" i], button[aria-label*="content" i]');
+      });
+
+      // 3. Strategy A: If Send button exists (prompt has text), inject directly BEFORE Send button
+      const sendBtn = rightBtns.find(b => 
+        b.matches('button[aria-label*="send" i], button[data-testid*="send" i], button[type="submit"]') ||
+        b.querySelector('svg path[d*="M"]')
+      ) || composer.querySelector('button[aria-label*="send" i], button[data-testid*="send" i], button[type="submit"]');
+
+      if (sendBtn?.parentElement) {
+        return { parent: sendBtn.parentElement, before: sendBtn };
+      }
+
+      // 4. Strategy B: If right-side action buttons exist (e.g. mic, waveform, audio in empty state),
+      // inject directly BEFORE the first right-hand button (keeping PromptPro between text and mic/waveform)
+      if (rightBtns.length > 0) {
+        const firstRight = rightBtns[0];
+        if (firstRight?.parentElement) {
+          return { parent: firstRight.parentElement, before: firstRight };
         }
       }
-      const scope = composer || document;
 
-      // Strategy 1: Directly before the Send button (when prompt has text)
-      const send = scope.querySelector('button[aria-label*="Send" i]')
-        || scope.querySelector('button[data-testid*="send" i]')
-        || scope.querySelector('button[type="submit"]');
-
-      if (send?.parentElement) {
-        return { parent: send.parentElement, before: send };
-      }
-
-      // Strategy 2: Directly before the Mic / Voice / Audio button
-      // (Claude renders this on the right side of the input bar in empty state)
-      const voice = scope.querySelector(
+      // 5. Strategy C: Query mic/voice/waveform button explicitly across composer
+      const voiceBtn = composer.querySelector(
         'button[aria-label*="mic" i],' +
         'button[aria-label*="voice" i],' +
         'button[aria-label*="record" i],' +
@@ -636,42 +667,17 @@
         'button[data-testid*="mic"],' +
         'button[data-testid*="voice"]'
       );
-
-      if (voice?.parentElement) {
-        return { parent: voice.parentElement, before: voice };
+      if (voiceBtn?.parentElement) {
+        return { parent: voiceBtn.parentElement, before: voiceBtn };
       }
 
-      // Strategy 3: Find the right-side action button cluster inside composer
-      if (composer) {
-        const allBtns = [...composer.querySelectorAll('button')];
-        // Filter out the left-side attach/plus button
-        const actionBtns = allBtns.filter(b => !b.matches('button[aria-label*="attach" i], button[aria-label*="upload" i], button[aria-label*="add" i], button[aria-label*="content" i]'));
-        if (actionBtns.length > 0) {
-          // Inject before the first action button on the right side
-          const target = actionBtns[0];
-          if (target.parentElement) {
-            return { parent: target.parentElement, before: target };
-          }
-        }
+      // 6. Strategy D: Sibling of the editor wrapper inside pill
+      if (input.parentElement && input.parentElement !== composer) {
+        return { parent: input.parentElement.parentElement, before: input.parentElement.nextSibling };
       }
 
-      // Strategy 4: Walk up from input to find sibling or child row with buttons
-      let walk = input.parentElement;
-      for (let i = 0; i < 10 && walk && walk !== document.body; i++) {
-        const sib = walk.nextElementSibling;
-        if (sib) {
-          const btns = [...sib.querySelectorAll('button')];
-          if (btns.length > 0) {
-            const firstActionBtn = btns.find(b => !b.matches('button[aria-label*="attach" i], button[aria-label*="add" i]')) || btns[0];
-            if (firstActionBtn?.parentElement) {
-              return { parent: firstActionBtn.parentElement, before: firstActionBtn };
-            }
-          }
-        }
-        walk = walk.parentElement;
-      }
-
-      return null;
+      // 7. Strategy E: Append to composer/pill
+      return { parent: composer, before: null };
     }
 
     /**
@@ -918,13 +924,13 @@
   let activeToastStartMs = 0;
 
   function showToast(message, type = 'info', delta = null) {
-    // If incoming message matches legacy template "Prompt upgraded! (+N)", parse delta
-    if (typeof message === 'string' && message.startsWith('Prompt upgraded') && delta == null) {
+    // If incoming message matches legacy template "Prompt upgraded! (+N)" or "Prompt Upgraded! (+N)", parse delta
+    if (typeof message === 'string' && message.toLowerCase().startsWith('prompt upgraded') && delta == null) {
       const match = message.match(/\(\+?(-?\d+)\)/);
       if (match) {
         delta = parseInt(match[1], 10);
       }
-      message = 'Prompt upgraded';
+      message = 'Prompt Upgraded';
     }
 
     if (activeToastDismissTimer) {
@@ -940,11 +946,17 @@
     toast.setAttribute('aria-live', 'polite');
     toast.setAttribute('aria-atomic', 'true');
 
-    // 20px circular badge with thin-stroke checkmark or amber warning icon
+    // 20px circular metallic badge with precision thin-stroke icon
     const iconBadge = document.createElement('span');
     iconBadge.className = 'promptpro-toast__icon-badge';
     if (type === 'error') {
       iconBadge.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+    } else if (type === 'warning') {
+      iconBadge.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
+    } else if (type === 'info') {
+      iconBadge.innerHTML = `<svg width="12" height="12" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 4C16 13 21 16 28 16C21 16 16 19 16 28C16 19 11 16 4 16C11 16 16 13 16 4Z" fill="currentColor"/></svg>`;
+    } else if (type === 'loading') {
+      iconBadge.innerHTML = `<svg class="promptpro-toast__spinner" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>`;
     } else {
       iconBadge.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
     }
@@ -1832,6 +1844,13 @@
     const container = document.createElement('div');
     container.className = 'promptpro-container';
     container.setAttribute(DATA_ATTR, 'container');
+    container.style.display = 'inline-flex';
+    container.style.alignItems = 'center';
+    container.style.alignSelf = 'center';
+    container.style.flexShrink = '0';
+    container.style.verticalAlign = 'middle';
+    container.style.zIndex = '3';
+    container.style.margin = '0 4px';
     container.appendChild(btn);
 
     // Keep popover attached directly to document.body (hidden), NOT inside container/<form>
@@ -1898,7 +1917,7 @@
               strategy: appliedStrategy
             }
           });
-          showToast('Prompt upgraded', 'success', delta > 0 ? delta : null);
+          showToast('Prompt Upgraded', 'success', delta > 0 ? delta : null);
 
           // Phase 3: Wire preference memory learning loop
           if (appliedTone) {
@@ -2222,33 +2241,85 @@
   // Fix 2: Button Injection with Orphan Cleanup
   // ═══════════════════════════════════════════════════════════
 
-  function isInjected() {
+  /**
+   * Determine whether two nodes (e.g. PromptPro button and composer input)
+   * reside in the same composer context or conversation pill.
+   */
+  function areInSameComposer(nodeA, nodeB) {
+    if (!nodeA || !nodeB || !nodeA.isConnected || !nodeB.isConnected) return false;
+    let cur = nodeA.parentElement;
+    for (let i = 0; i < 10 && cur && cur !== document.body && cur.tagName !== 'MAIN'; i++) {
+      if (cur.contains(nodeB)) return true;
+      cur = cur.parentElement;
+    }
+    return false;
+  }
+
+  function isInjected(adapter) {
     const btn = document.getElementById(IDS.BTN);
-    return btn && btn.isConnected;
+    if (!btn || !btn.isConnected) return false;
+
+    // If an adapter is provided, verify button shares the composer with the active input
+    if (adapter && typeof adapter.getInputField === 'function') {
+      try {
+        const input = adapter.getInputField();
+        if (input && input.isConnected) {
+          if (!areInSameComposer(btn, input)) {
+            return false;
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    return true;
   }
 
   /**
-   * Remove orphaned PromptPro elements (duplicates, detached containers).
+   * Remove orphaned PromptPro elements (duplicates, detached containers, or containers outside active composer).
    */
-  function cleanupOrphans() {
-    const all = document.querySelectorAll(`[${DATA_ATTR}="${DATA_VALUE}"]`);
-    if (all.length <= 1) return;
-    // Keep the first connected one, remove the rest
-    let kept = false;
-    all.forEach(el => {
-      const container = el.closest('.promptpro-container') || el;
-      if (!kept && container.isConnected) {
-        kept = true;
-      } else {
+  function cleanupOrphans(adapter) {
+    const allContainers = document.querySelectorAll('.promptpro-container');
+    if (allContainers.length === 0) return;
+
+    let input = null;
+    if (adapter && typeof adapter.getInputField === 'function') {
+      try { input = adapter.getInputField(); } catch { /* ignore */ }
+    }
+
+    allContainers.forEach((container, idx) => {
+      // 1. Remove disconnected containers
+      if (!container.isConnected) {
+        container.remove();
+        return;
+      }
+      // 2. If active input is found, remove any container that is not in the same composer
+      if (input && input.isConnected) {
+        const btn = container.querySelector('#' + IDS.BTN);
+        if (btn && !areInSameComposer(btn, input)) {
+          container.remove();
+          return;
+        }
+      }
+      // 3. Deduplicate: if there's more than one connected container, keep the first
+      if (idx > 0) {
         container.remove();
       }
     });
+
+    const allBtns = document.querySelectorAll(`[${DATA_ATTR}="${DATA_VALUE}"]`);
+    if (allBtns.length > 1) {
+      allBtns.forEach(btn => {
+        if (!btn.isConnected || (input && input.isConnected && !areInSameComposer(btn, input))) {
+          btn.closest('.promptpro-container')?.remove() || btn.remove();
+        }
+      });
+    }
   }
 
   function injectUI(adapter) {
     // Clean orphans before checking
-    cleanupOrphans();
-    if (isInjected()) return;
+    cleanupOrphans(adapter);
+    if (isInjected(adapter)) return;
 
     const container = createUIElements(adapter);
     let placed = false;
@@ -2258,9 +2329,13 @@
     if (typeof adapter.findInjectPoint === 'function') {
       const point = adapter.findInjectPoint();
       if (point?.parent) {
-        if (point.before) point.parent.insertBefore(container, point.before);
-        else point.parent.appendChild(container);
-        placed = true;
+        try {
+          if (point.before) point.parent.insertBefore(container, point.before);
+          else point.parent.appendChild(container);
+          placed = true;
+        } catch (e) {
+          console.warn('[PromptPro] Primary injection failed:', e);
+        }
       }
     }
 
@@ -2270,13 +2345,16 @@
       const sendButton = adapter.getSendButton();
       const toolbar = adapter.getToolbar();
 
-      if (sendButton?.parentElement) {
-        // Insert before send button — keeps PromptPro left of send, right of other controls
-        sendButton.parentElement.insertBefore(container, sendButton);
-        placed = true;
-      } else if (toolbar) {
-        toolbar.appendChild(container);
-        placed = true;
+      try {
+        if (sendButton?.parentElement) {
+          sendButton.parentElement.insertBefore(container, sendButton);
+          placed = true;
+        } else if (toolbar) {
+          toolbar.appendChild(container);
+          placed = true;
+        }
+      } catch (e) {
+        console.warn('[PromptPro] Fallback injection failed:', e);
       }
     }
 
@@ -2654,7 +2732,7 @@
       if (adapter.siteId === 'chatgpt' || adapter.siteId === 'claude' || adapter.siteId === 'gemini') {
         [150, 400, 900, 1800, 3500].forEach((ms) => {
           setTimeout(() => {
-            if (!isInjected()) this._attemptInject();
+            if (!isInjected(adapter)) this._attemptInject();
           }, ms);
         });
       }
@@ -3472,9 +3550,9 @@
     }
 
     _onFocusIn(e) {
-      if (isInjected()) return;
+      if (isInjected(this.adapter)) return;
       const t = e.target;
-      if (t && (t.contentEditable === 'true' || t.tagName === 'TEXTAREA')) {
+      if (t && (t.contentEditable === 'true' || t.contentEditable === '' || t.contentEditable === 'plaintext-only' || t.isContentEditable || t.tagName === 'TEXTAREA')) {
         setTimeout(() => this._attemptInject(), 80);
       }
     }
@@ -3496,13 +3574,12 @@
         // Wait for DOM to settle
         setTimeout(() => {
           isScheduled = false;
-          // Fast path: button exists AND is connected to DOM
-          const btn = document.getElementById(IDS.BTN);
-          if (btn && btn.isConnected) return;
+          // Fast path: button exists AND is connected to active composer
+          if (isInjected(this.adapter)) return;
 
-          // Button gone — schedule reinject
+          // Button gone or in stale container — schedule reinject
           this._scheduleReinject();
-        }, 300);
+        }, 150);
       });
 
       this.bodyObserver.observe(document.body, {
@@ -3557,7 +3634,7 @@
     }
 
     _scheduleReinject() {
-      if (isInjected()) return;
+      if (isInjected(this.adapter)) return;
       clearTimeout(this.debounceTimer);
       if (this._rafId) cancelAnimationFrame(this._rafId);
 
@@ -3571,7 +3648,7 @@
     }
 
     _attemptInject() {
-      if (isInjected()) return;
+      if (isInjected(this.adapter)) return;
       try {
         injectUI(this.adapter);
         this.injectRetryCount = 0; // reset on success

@@ -1080,8 +1080,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         try {
           const resp = await fetch(`${base}/api/entitlement`, {
             headers: {
-              'Authorization': `Bearer ${session.token}`,
-              ...(session.user?.id ? { 'x-promptpro-user-id': session.user.id } : {})
+              'Authorization': `Bearer ${session.token}`
             }
           });
           if (resp.ok) {
@@ -1314,8 +1313,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
           const headers = {
             'Content-Type': 'application/json',
-            ...(tokenToSend ? { 'Authorization': `Bearer ${tokenToSend}` } : {}),
-            ...(userIdToSend ? { 'x-promptpro-user-id': userIdToSend } : {})
+            ...(tokenToSend ? { 'Authorization': `Bearer ${tokenToSend}` } : {})
           };
 
           const body = JSON.stringify({

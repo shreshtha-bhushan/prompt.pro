@@ -329,3 +329,30 @@ textarea:focus {
   background:   transparent !important;
   border-right: none !important;
 }
+
+/* ── Apple-Style Minimal Metallic Pill Toasts (Sonner) ────── */
+[data-sonner-toaster] [data-sonner-toast] {
+  border-radius: 9999px !important;
+  background: linear-gradient(180deg, rgba(38, 38, 42, 0.88) 0%, rgba(20, 20, 24, 0.92) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.22), inset 0 -1px 1px rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+  color: #ffffff !important;
+  min-height: 44px !important;
+  padding: 10px 16px 10px 12px !important;
+  gap: 10px !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-title] {
+  color: #ffffff !important;
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  letter-spacing: -0.01em !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-description] {
+  color: rgba(255, 255, 255, 0.72) !important;
+  font-size: 12px !important;
+}
+

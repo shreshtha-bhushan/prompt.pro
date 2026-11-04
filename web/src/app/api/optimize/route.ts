@@ -16,8 +16,8 @@
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
-import { verifyToken } from "@clerk/backend";
+import { clerkClient } from "@clerk/nextjs/server";
+import { resolveAuthUserId } from "@/lib/auth-resolver";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   CREDIT_COSTS,
@@ -34,63 +34,6 @@ import { getCorsHeaders, handleOptions } from "@/lib/cors";
 
 export const dynamic = "force-dynamic";
 
-async function resolveAuthenticatedUserId(request: NextRequest): Promise<string | null> {
-  // 1. Try standard Clerk cookies via auth()
-  try {
-    const authResult = await auth();
-    if (authResult?.userId) {
-      return authResult.userId;
-    }
-  } catch (_e) {}
-
-  // 2. Check Authorization: Bearer <token>
-  const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
-  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
-    const token = authHeader.substring(7).trim();
-    if (token) {
-      // 2a. Verify via Clerk verifyToken
-      try {
-        const verified = await verifyToken(token, {
-          secretKey: process.env.CLERK_SECRET_KEY,
-        });
-        if (verified && verified.sub) {
-          return verified.sub;
-        }
-      } catch (_vErr) {
-        // 2b. If verifyToken fails (e.g. 60s session token expired while tab was open), verify sub against Clerk
-        try {
-          const parts = token.split('.');
-          if (parts.length === 3) {
-            const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-            const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-            const payload = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
-            if (payload && typeof payload.sub === 'string' && payload.sub.startsWith('user_')) {
-              const client = await clerkClient();
-              const user = await client.users.getUser(payload.sub);
-              if (user && user.id === payload.sub) {
-                return user.id;
-              }
-            }
-          }
-        } catch (_dErr) {}
-      }
-    }
-  }
-
-  // 3. Extension fallback: check x-promptpro-user-id header verified against Clerk
-  const extUserId = request.headers.get("x-promptpro-user-id");
-  if (extUserId && extUserId.startsWith("user_")) {
-    try {
-      const client = await clerkClient();
-      const user = await client.users.getUser(extUserId);
-      if (user && user.id === extUserId) {
-        return user.id;
-      }
-    } catch (_e) {}
-  }
-
-  return null;
-}
 
 const REASON_BY_MODE: Record<
   OptimizationMode,
@@ -109,7 +52,7 @@ export async function POST(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request);
 
   // ── 1. Authentication ─────────────────────────────────────
-  const userId = await resolveAuthenticatedUserId(request);
+  const userId = await resolveAuthUserId(request);
   if (!userId) {
     return NextResponse.json(
       { error: "unauthorized", code: "AUTH_REQUIRED" },
@@ -273,12 +216,26 @@ export async function POST(request: NextRequest) {
         if (!retryRpc.error) {
           newBalance = retryRpc.data as number;
         } else {
-          console.warn("[/api/optimize] Retry spend failed, proceeding with in-memory balance:", retryRpc.error);
-          newBalance = Math.max(0, (profile.credits_balance ?? 50) - cost);
+          console.error("[/api/optimize] Retry spend failed:", retryRpc.error);
+          return NextResponse.json(
+            {
+              error: "db_error",
+              message: "A database error occurred while processing your credits. Please try again.",
+              code: "DB_ERROR",
+            },
+            { status: 503, headers: corsHeaders }
+          );
         }
       } else {
-        console.warn("[/api/optimize] spend_credits RPC notice:", spendErr);
-        newBalance = Math.max(0, (profile.credits_balance ?? 50) - cost);
+        console.error("[/api/optimize] spend_credits RPC error:", spendErr);
+        return NextResponse.json(
+          {
+            error: "db_error",
+            message: "A database error occurred while processing your credits. Please try again.",
+            code: "DB_ERROR",
+          },
+          { status: 503, headers: corsHeaders }
+        );
       }
     } else {
       newBalance = balanceAfter as number;

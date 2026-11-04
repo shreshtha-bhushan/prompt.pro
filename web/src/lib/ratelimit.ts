@@ -14,7 +14,7 @@
 
 import { NextResponse } from "next/server";
 
-export type RateLimitType = "optimize" | "sync" | "admin" | "webhook";
+export type RateLimitType = "optimize" | "sync" | "admin" | "webhook" | "autocomplete";
 
 interface RateLimitResult {
   success: boolean;
@@ -70,6 +70,7 @@ export async function rateLimit(
       sync: { max: 60, windowMs: 60_000 },
       admin: { max: 10, windowMs: 60_000 },
       webhook: { max: 120, windowMs: 60_000 },
+      autocomplete: { max: 60, windowMs: 60_000 },
     };
 
     const cfg = limits[type] || { max: 30, windowMs: 60_000 };
@@ -88,6 +89,7 @@ export async function rateLimit(
       sync: { max: 60, window: "60 s" },
       admin: { max: 10, window: "60 s" },
       webhook: { max: 120, window: "60 s" },
+      autocomplete: { max: 60, window: "60 s" },
     };
 
     const selected = configs[type];

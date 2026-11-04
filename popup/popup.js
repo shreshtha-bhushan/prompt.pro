@@ -62,6 +62,85 @@
     btn.appendChild(span);
   }
 
+  // ── Popup Toast Notifications (Apple-Style Minimal Metallic Pill) ────
+  let activePopupToastTimer = null;
+  function showPopupToast(message, type = 'success') {
+    let toast = document.querySelector('.popup-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.className = 'popup-toast';
+      document.body.appendChild(toast);
+    }
+
+    if (activePopupToastTimer) {
+      clearTimeout(activePopupToastTimer);
+      activePopupToastTimer = null;
+    }
+
+    toast.className = `popup-toast popup-toast--${type}`;
+    toast.innerHTML = '';
+
+    const iconBadge = document.createElement('span');
+    iconBadge.className = 'popup-toast__icon-badge';
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '11');
+    svg.setAttribute('height', '11');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2.5');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+
+    if (type === 'error') {
+      const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line1.setAttribute('x1', '18'); line1.setAttribute('y1', '6'); line1.setAttribute('x2', '6'); line1.setAttribute('y2', '18');
+      const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line2.setAttribute('x1', '6'); line2.setAttribute('y1', '6'); line2.setAttribute('x2', '18'); line2.setAttribute('y2', '18');
+      svg.appendChild(line1);
+      svg.appendChild(line2);
+    } else if (type === 'warning') {
+      const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line1.setAttribute('x1', '12'); line1.setAttribute('y1', '9'); line1.setAttribute('x2', '12'); line1.setAttribute('y2', '13');
+      const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line2.setAttribute('x1', '12'); line2.setAttribute('y1', '17'); line2.setAttribute('x2', '12.01'); line2.setAttribute('y2', '17');
+      svg.appendChild(line1);
+      svg.appendChild(line2);
+    } else if (type === 'info') {
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '10');
+      const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line1.setAttribute('x1', '12'); line1.setAttribute('y1', '16'); line1.setAttribute('x2', '12'); line1.setAttribute('y2', '12');
+      const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line2.setAttribute('x1', '12'); line2.setAttribute('y1', '8'); line2.setAttribute('x2', '12.01'); line2.setAttribute('y2', '8');
+      svg.appendChild(circle);
+      svg.appendChild(line1);
+      svg.appendChild(line2);
+    } else {
+      // success
+      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      poly.setAttribute('points', '20 6 9 17 4 12');
+      svg.appendChild(poly);
+    }
+
+    iconBadge.appendChild(svg);
+    toast.appendChild(iconBadge);
+
+    const textSpan = document.createElement('span');
+    textSpan.className = 'popup-toast__text';
+    textSpan.textContent = message;
+    toast.appendChild(textSpan);
+
+    void toast.offsetWidth;
+    toast.classList.add('popup-toast--visible');
+
+    activePopupToastTimer = setTimeout(() => {
+      toast.classList.remove('popup-toast--visible');
+      activePopupToastTimer = null;
+    }, 2400);
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // DOM REFERENCES
   // ═══════════════════════════════════════════════════════════════
@@ -221,7 +300,6 @@
     const headers = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${authSession.token}`,
-      ...(authSession.user?.id ? { 'x-promptpro-user-id': authSession.user.id } : {}),
       ...(options.headers || {})
     };
     try {
@@ -1130,6 +1208,7 @@
       const res = await sendBackground('CLEAR_HISTORY', {});
       if (res.promptDb) mergeDb(res.promptDb);
       renderTabContent('history');
+      showPopupToast('History Cleared', 'info');
       // Also clear on cloud
       if (isAuthenticated()) {
         cloudWrite('clearHistory', {}).catch(() => {});
@@ -1166,6 +1245,7 @@
       if (libraryText) libraryText.value = '';
       if (libraryTags) libraryTags.value = '';
       renderTabContent('library');
+      showPopupToast('Saved to Library', 'success');
       
       if (typeof track === 'function') track('snippet_saved', { source: 'composer', has_tags: tags.length > 0 });
 
@@ -1201,6 +1281,7 @@
       if (ti) ti.value = '';
       if (tb) tb.value = '';
       renderTabContent('context');
+      showPopupToast('Context Block Saved', 'success');
       // Also save to cloud
       if (isAuthenticated()) {
         cloudWrite('addContext', { title: title || 'Context', content }).catch(() => {});
@@ -1309,6 +1390,7 @@
             copyUpgradedBtn.innerHTML = checkIcon;
             copyUpgradedBtn.classList.add('detail-drawer__action-btn--success');
             copyUpgTag.textContent = 'Copied!';
+            showPopupToast('Prompt Copied', 'success');
             setTimeout(() => {
               copyUpgradedBtn.innerHTML = copyUpgIcon;
               copyUpgradedBtn.classList.remove('detail-drawer__action-btn--success');
@@ -1338,6 +1420,7 @@
             copyOrigBtn.innerHTML = checkIcon;
             copyOrigBtn.classList.add('detail-drawer__action-btn--success');
             copyOrgTag.textContent = 'Copied!';
+            showPopupToast('Original Copied', 'success');
             setTimeout(() => {
               copyOrigBtn.innerHTML = copyOrgIcon;
               copyOrigBtn.classList.remove('detail-drawer__action-btn--success');
@@ -1375,6 +1458,7 @@
             bookmarkBtn.classList.add('detail-drawer__action-btn--active');
             bookmarkBtn.innerHTML = bookmarkIconFilled;
             saveTag.textContent = 'Saved!';
+            showPopupToast('Saved to Library', 'success');
             
             if (typeof track === 'function' && !isAlreadySaved) track('snippet_saved', { source: 'history', has_tags: true });
 
@@ -1432,6 +1516,7 @@
             }
             closeDrawer();
             renderTabContent('history');
+            showPopupToast('Prompt Deleted', 'info');
           }
         });
         deleteWrap.appendChild(deleteBtn);
@@ -1615,6 +1700,7 @@
           if (typeof track === 'function') track('copy_clicked', { source: 'library', type: 'snippet' });
           navigator.clipboard.writeText(item.text || '').then(() => {
             setCopyIcon(copyBtn, true);
+            showPopupToast('Copied to Clipboard', 'success');
             setTimeout(() => {
               setCopyIcon(copyBtn, false);
             }, 2000);
@@ -1644,6 +1730,7 @@
             const res = await sendBackground('SAVE_PROMPTS', promptDb);
             if (res && res.promptDb) mergeDb(res.promptDb);
             renderTabContent('library');
+            showPopupToast('Prompt Deleted', 'info');
             if (isAuthenticated() && item.id) {
               cloudWrite('deleteSnippet', { id: item.id }).catch(() => {});
             }
@@ -1736,6 +1823,7 @@
             const res = await sendBackground('DELETE_CONTEXT_BLOCK', { id: block.id });
             if (res.promptDb) mergeDb(res.promptDb);
             renderTabContent('context');
+            showPopupToast('Context Block Deleted', 'info');
             if (isAuthenticated()) {
               cloudWrite('deleteContext', { id: block.id }).catch(() => {});
             }
@@ -1758,6 +1846,7 @@
           e.stopPropagation();
           navigator.clipboard.writeText(block.content || '').then(() => {
             setCopyIcon(copyBtn, true);
+            showPopupToast('Copied to Clipboard', 'success');
             setTimeout(() => {
               setCopyIcon(copyBtn, false);
             }, 2000);

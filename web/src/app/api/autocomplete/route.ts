@@ -1,17 +1,35 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { resolveAuthUserId } from "@/lib/auth-resolver";
+import { rateLimit, buildRateLimitResponse } from "@/lib/ratelimit";
+import { getCorsHeaders, handleOptions } from "@/lib/cors";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+export const dynamic = "force-dynamic";
 
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: corsHeaders });
+export async function OPTIONS(request: NextRequest) {
+  return handleOptions(request);
 }
 
 export async function POST(request: NextRequest) {
+  const corsHeaders = getCorsHeaders(request);
+
   try {
+    // 1. Authentication Check
+    const userId = await resolveAuthUserId(request);
+    if (!userId) {
+      return NextResponse.json(
+        { error: "unauthorized", code: "AUTH_REQUIRED" },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
+    // 2. Rate Limiting Check (60 req / 60s per user)
+    const rateLimitResult = await rateLimit("autocomplete", userId);
+    if (!rateLimitResult.success) {
+      return buildRateLimitResponse(rateLimitResult, corsHeaders);
+    }
+
+    // 3. Input Validation
     const body = await request.json().catch(() => ({}));
     const { text } = body;
 
@@ -81,3 +99,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ completion: null }, { headers: corsHeaders });
   }
 }
+

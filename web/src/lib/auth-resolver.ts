@@ -1,72 +1,49 @@
 import type { NextRequest } from "next/server";
-import { auth, clerkClient, verifyToken } from "@clerk/nextjs/server";
+import { auth, verifyToken } from "@clerk/nextjs/server";
 
 /**
  * Resolves the authenticated Clerk userId across:
- * 1. Authorization: Bearer <clerk_token> (standard JWT verification)
- * 2. Authorization: Bearer <clerk_token> (expired JWT fallback: decode sub + verify against Clerk users API)
- * 3. x-promptpro-user-id header (validated against Clerk API)
- * 4. Standard Next.js / Clerk cookies via auth()
+ * 1. Standard Next.js / Clerk session cookies via auth()
+ * 2. Authorization: Bearer <clerk_token> with cryptographic JWT signature verification
+ *
+ * SECURITY:
+ * Never trust unverified JWT payloads or custom client headers.
+ * Any token failing cryptographic signature verification returns null.
  */
 export async function resolveAuthUserId(request: NextRequest): Promise<string | null> {
-  let userId: string | null = null;
-  const authHeader = request.headers.get("authorization");
+  // 1. Check standard Clerk session cookies via auth()
+  try {
+    const sessionAuth = await auth();
+    if (sessionAuth?.userId) {
+      return sessionAuth.userId;
+    }
+  } catch (_e) {
+    // Session cookie extraction failed or not present
+  }
 
-  if (authHeader?.startsWith("Bearer ")) {
-    const rawToken = authHeader.slice(7).trim();
-    if (rawToken) {
-      // 1. Try standard Clerk JWT verification
-      try {
-        const verified = await verifyToken(rawToken, {
-          secretKey: process.env.CLERK_SECRET_KEY,
-        });
-        if (verified?.sub) {
-          userId = verified.sub;
-        }
-      } catch (_err) {
-        // 2. Token expired or verification failed — inspect payload sub and verify via Clerk Backend API
+  // 2. Check Authorization: Bearer <token>
+  const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
+  if (authHeader) {
+    const parts = authHeader.trim().split(/\s+/);
+    if (parts.length === 2 && parts[0].toLowerCase() === "bearer") {
+      const rawToken = parts[1].trim();
+      const secretKey = process.env.CLERK_SECRET_KEY;
+
+      if (rawToken && secretKey) {
         try {
-          const parts = rawToken.split(".");
-          if (parts.length === 3) {
-            const payload = JSON.parse(
-              Buffer.from(parts[1], "base64").toString("utf-8")
-            );
-            if (payload?.sub) {
-              const client = await clerkClient();
-              const user = await client.users.getUser(payload.sub);
-              if (user?.id) {
-                userId = user.id;
-              }
-            }
+          const verified = await verifyToken(rawToken, {
+            secretKey,
+          });
+          if (verified?.sub && typeof verified.sub === "string" && verified.sub.startsWith("user_")) {
+            return verified.sub;
           }
-        } catch (_e) {
-          // invalid token
+        } catch (_err) {
+          // Token signature verification failed (e.g. invalid, forged, or expired)
         }
       }
     }
   }
 
-  // 3. Fallback: validate explicit header against Clerk API
-  if (!userId) {
-    const headerUserId = request.headers.get("x-promptpro-user-id");
-    if (headerUserId?.startsWith("user_")) {
-      try {
-        const client = await clerkClient();
-        const user = await client.users.getUser(headerUserId);
-        if (user?.id) {
-          userId = user.id;
-        }
-      } catch (_e) {}
-    }
-  }
-
-  // 4. Fallback: Cookie-based session
-  if (!userId) {
-    try {
-      const sessionAuth = await auth();
-      userId = sessionAuth.userId;
-    } catch (_e) {}
-  }
-
-  return userId;
+  return null;
 }
+
