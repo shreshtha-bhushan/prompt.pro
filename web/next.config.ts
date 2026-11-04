@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const cspHeader = `
   default-src 'self';
@@ -14,6 +15,9 @@ const cspHeader = `
 `.replace(/\s{2,}/g, ' ').trim();
 
 const nextConfig: NextConfig = {
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   async rewrites() {
     return [
       // PostHog ingestion reverse proxy — bypasses ad blockers and keeps

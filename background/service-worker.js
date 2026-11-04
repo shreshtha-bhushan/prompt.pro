@@ -21,7 +21,7 @@ const _SW_VERSION = chrome.runtime.getManifest().version;
 let _sw_distinctId = null;
 let _sw_anonId = null;
 let _sw_optedOut = false;
-let _sw_analyticsInit = false;
+let _sw_initPromise = null;
 
 function _swUuid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -41,6 +41,7 @@ function _swStripContent(props) {
 }
 
 async function _swSend(eventName, properties) {
+  await swInitAnalytics();
   if (!_POSTHOG_KEY_SW || _POSTHOG_KEY_SW === 'phc_placeholder' || _sw_optedOut) return;
   const distinctId = _sw_distinctId || _sw_anonId || 'anonymous';
   const payload = {
@@ -69,19 +70,30 @@ async function _swSend(eventName, properties) {
 }
 
 async function swInitAnalytics() {
-  if (_sw_analyticsInit) return;
-  _sw_analyticsInit = true;
-  try {
-    const stored = await new Promise((resolve) =>
-      chrome.storage.local.get(['pp_anon_id', 'pp_analytics_opt_out'], resolve)
-    );
-    _sw_optedOut = stored.pp_analytics_opt_out === true;
-    _sw_anonId = stored.pp_anon_id || _swUuid();
-    if (!stored.pp_anon_id) chrome.storage.local.set({ pp_anon_id: _sw_anonId });
-  } catch (_e) { _sw_anonId = _swUuid(); }
+  if (_sw_initPromise) return _sw_initPromise;
+  _sw_initPromise = (async () => {
+    try {
+      const stored = await new Promise((resolve) =>
+        chrome.storage.local.get(['pp_anon_id', 'pp_analytics_opt_out', 'authSession'], resolve)
+      );
+      _sw_optedOut = stored.pp_analytics_opt_out === true;
+      _sw_anonId = stored.pp_anon_id || _swUuid();
+      if (!stored.pp_anon_id) {
+        chrome.storage.local.set({ pp_anon_id: _sw_anonId });
+      }
+      // Hydrate authenticated user identity on worker wakeup
+      if (stored.authSession?.user?.id) {
+        _sw_distinctId = stored.authSession.user.id;
+      }
+    } catch (_e) {
+      _sw_anonId = _swUuid();
+    }
+  })();
+  return _sw_initPromise;
 }
 
 async function swIdentifyUser(clerkUserId, properties) {
+  await swInitAnalytics();
   if (!clerkUserId || _sw_optedOut || _POSTHOG_KEY_SW === 'phc_placeholder') return;
   _sw_distinctId = clerkUserId;
   const payload = {
@@ -106,13 +118,18 @@ async function swIdentifyUser(clerkUserId, properties) {
 
 function swTrack(eventName, properties) { _swSend(eventName, properties); }
 
-// Initialize analytics when service worker starts
+// Initialize analytics and hydrate identity when service worker starts
 swInitAnalytics();
 
-// Reactively keep analytics opt-out preference in sync with popup toggles
+// Reactively keep analytics opt-out preference and user identity in sync with storage
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.pp_analytics_opt_out) {
-    _sw_optedOut = changes.pp_analytics_opt_out.newValue === true;
+  if (area === 'local') {
+    if (changes.pp_analytics_opt_out) {
+      _sw_optedOut = changes.pp_analytics_opt_out.newValue === true;
+    }
+    if (changes.authSession) {
+      _sw_distinctId = changes.authSession.newValue?.user?.id || null;
+    }
   }
 });
 
