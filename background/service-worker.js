@@ -1050,6 +1050,67 @@ function getScoreDiagnostics(originalText, rewrittenText, beforeScore, afterScor
 }
 
 // ═══════════════════════════════════════════════════════════════
+// JWT & AUTH RESILIENCE UTILITIES (Risk R-1 Mitigation)
+// ═══════════════════════════════════════════════════════════════
+
+function decodeJWTPayload(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch (_e) {
+    return null;
+  }
+}
+
+function isJwtExpired(token) {
+  if (!token || typeof token !== 'string') return true;
+  const payload = decodeJWTPayload(token);
+  if (!payload || !payload.exp) return false;
+  return Date.now() >= (payload.exp * 1000 - 5000); // Expired or expiring within 5s
+}
+
+async function getCookieToken(apiBase = 'https://prompt-pro-liart.vercel.app') {
+  if (typeof chrome !== 'undefined' && chrome.cookies) {
+    try {
+      if (chrome.cookies.getAll) {
+        const cookies = await new Promise(r => chrome.cookies.getAll({ name: '__session' }, r));
+        if (cookies && cookies.length > 0) {
+          const matched = cookies.find(c => c.domain.includes('prompt-pro') || c.domain.includes('vercel') || c.domain.includes('localhost'));
+          if (matched?.value) return matched.value;
+          if (cookies[0]?.value) return cookies[0].value;
+        }
+      }
+      if (chrome.cookies.get) {
+        const c1 = await new Promise(r => chrome.cookies.get({ url: apiBase, name: '__session' }, r));
+        if (c1 && c1.value) return c1.value;
+        const c2 = await new Promise(r => chrome.cookies.get({ url: 'https://prompt-pro-liart.vercel.app', name: '__session' }, r));
+        if (c2 && c2.value) return c2.value;
+      }
+    } catch (_e) {}
+  }
+  return null;
+}
+
+async function resolveFreshToken(session, apiBase) {
+  let token = session?.token;
+  if (!token || isJwtExpired(token)) {
+    const cookieToken = await getCookieToken(apiBase);
+    if (cookieToken && !isJwtExpired(cookieToken)) {
+      token = cookieToken;
+      chrome.storage.local.get(['authSession'], (res) => {
+        const cur = res.authSession || {};
+        chrome.storage.local.set({ authSession: { ...cur, token: cookieToken } });
+      });
+    }
+  }
+  return token;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MESSAGE HANDLER
 // ═══════════════════════════════════════════════════════════════
 
@@ -1167,85 +1228,116 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
-    chrome.storage.local.get(['authSession', 'entitlementSnapshot'], (result) => {
-      const session = result.authSession;
-      if (!session || !session.token) {
-        sendResponse({ error: 'NOT_SIGNED_IN', message: 'Please sign in via the PromptPro dashboard.' });
+    chrome.storage.local.get(['authSession', 'entitlementSnapshot'], async (result) => {
+      const session = result.authSession || {};
+      const API_BASE = 'https://prompt-pro-liart.vercel.app';
+
+      let token = await resolveFreshToken(session, API_BASE);
+      if (!token) {
+        token = await getCookieToken(API_BASE);
+      }
+
+      if (!token) {
+        console.warn('[PromptPro] No auth token found for optimize, falling back to local synthesis');
+        sendResponse({
+          success: true,
+          rewritten: fallbackLocal(text, 'enhance', null, false),
+          isLocalFallback: true,
+          notice: 'Please sign in via PromptPro dashboard. Upgraded with local engine.'
+        });
         return;
       }
 
-      const API_BASE = 'https://prompt-pro-liart.vercel.app';
-
-      fetch(`${API_BASE}/api/optimize`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ prompt: text, mode })
-      })
-        .then(async (response) => {
-          const payload = await response.json();
-
-          if (response.status === 402) {
-            swTrack('optimization_failed', { mode, error_type: 'INSUFFICIENT_CREDITS' });
-            sendResponse({
-              error: 'INSUFFICIENT_CREDITS',
-              balance: payload.balance,
-              required: payload.required,
-              message: `You're out of credits (${payload.balance || 0} left, ${payload.required} needed).`
-            });
-            return;
-          }
-
-          if (response.status === 403) {
-            swTrack('optimization_failed', { mode, error_type: 'MODE_NOT_AVAILABLE', required_tier: payload.requiredTier });
-            sendResponse({
-              error: 'MODE_NOT_AVAILABLE',
-              requiredTier: payload.requiredTier,
-              message: `This mode requires ${payload.requiredTier} — upgrade to unlock it.`
-            });
-            return;
-          }
-
-          if (!response.ok) {
-            if (response.status === 401) {
-              swTrack('optimization_failed', { mode, error_type: 'SESSION_EXPIRED' });
-              sendResponse({
-                error: 'SESSION_EXPIRED',
-                message: 'Your session has expired. Please visit the PromptPro dashboard to sign in again.'
-              });
-              return;
-            }
-            swTrack('optimization_failed', { mode, error_type: 'OPTIMIZE_FAILED', status: response.status });
-            sendResponse({
-              error: 'OPTIMIZE_FAILED',
-              message: payload.detail || payload.error || `Server error ${response.status}`
-            });
-            return;
-          }
-
-          // Update cached credit balance from the response (no second fetch needed)
-          const cached = result.entitlementSnapshot || {};
-          const updatedSnapshot = {
-            ...cached,
-            creditsBalance: payload.creditsBalance,
-            checkedAt: new Date().toISOString()
-          };
-          chrome.storage.local.set({ entitlementSnapshot: updatedSnapshot });
-
-          swTrack('optimization_run', { mode, source: 'extension', credits_balance: payload.creditsBalance });
-
-          sendResponse({
-            success: true,
-            rewritten: payload.result,
-            creditsBalance: payload.creditsBalance
-          });
-        })
-        .catch(err => {
-          swTrack('optimization_failed', { mode, error_type: 'NETWORK_ERROR', error_message: err.message });
-          sendResponse({ error: 'NETWORK_ERROR', message: err.message });
+      const executeOptimize = async (activeToken) => {
+        return fetch(`${API_BASE}/api/optimize`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${activeToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ prompt: text, mode })
         });
+      };
+
+      try {
+        let response = await executeOptimize(token);
+
+        // Transparent 401 retry: JWT might have expired during session
+        if (response.status === 401) {
+          console.warn('[PromptPro] OPTIMIZE_PROMPT 401, checking for fresh session cookie...');
+          const freshCookie = await getCookieToken(API_BASE);
+          if (freshCookie && freshCookie !== token) {
+            token = freshCookie;
+            chrome.storage.local.get(['authSession'], (res) => {
+              const cur = res.authSession || {};
+              chrome.storage.local.set({ authSession: { ...cur, token: freshCookie } });
+            });
+            response = await executeOptimize(token);
+          }
+        }
+
+        const payload = await response.json();
+
+        if (response.status === 402) {
+          swTrack('optimization_failed', { mode, error_type: 'INSUFFICIENT_CREDITS' });
+          sendResponse({
+            error: 'INSUFFICIENT_CREDITS',
+            balance: payload.balance,
+            required: payload.required,
+            message: `You're out of credits (${payload.balance || 0} left, ${payload.required} needed).`
+          });
+          return;
+        }
+
+        if (response.status === 403) {
+          swTrack('optimization_failed', { mode, error_type: 'MODE_NOT_AVAILABLE', required_tier: payload.requiredTier });
+          sendResponse({
+            error: 'MODE_NOT_AVAILABLE',
+            requiredTier: payload.requiredTier,
+            message: `This mode requires ${payload.requiredTier} — upgrade to unlock it.`
+          });
+          return;
+        }
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            swTrack('optimization_fallback_local', { mode, error_type: 'SESSION_EXPIRED' });
+            sendResponse({
+              success: true,
+              rewritten: fallbackLocal(text, 'enhance', null, false),
+              isLocalFallback: true,
+              notice: 'Your session expired. Upgraded using local engine — open dashboard to re-sync credits.'
+            });
+            return;
+          }
+          swTrack('optimization_failed', { mode, error_type: 'OPTIMIZE_FAILED', status: response.status });
+          sendResponse({
+            error: 'OPTIMIZE_FAILED',
+            message: payload.detail || payload.error || `Server error ${response.status}`
+          });
+          return;
+        }
+
+        // Update cached credit balance from the response (no second fetch needed)
+        const cached = result.entitlementSnapshot || {};
+        const updatedSnapshot = {
+          ...cached,
+          creditsBalance: payload.creditsBalance,
+          checkedAt: new Date().toISOString()
+        };
+        chrome.storage.local.set({ entitlementSnapshot: updatedSnapshot });
+
+        swTrack('optimization_run', { mode, source: 'extension', credits_balance: payload.creditsBalance });
+
+        sendResponse({
+          success: true,
+          rewritten: payload.result,
+          creditsBalance: payload.creditsBalance
+        });
+      } catch (err) {
+        swTrack('optimization_failed', { mode, error_type: 'NETWORK_ERROR', error_message: err.message });
+        sendResponse({ error: 'NETWORK_ERROR', message: err.message });
+      }
     });
     return true; // async
   }
@@ -1298,34 +1390,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const apiUrl = `${apiBase}/api/upgrade`;
         console.log('[PromptPro] Sending request to upgrade API...', apiUrl);
 
-        let tokenToSend = session.token;
-        const userIdToSend = session.user?.id;
-
-        const getCookieToken = async () => {
-          if (typeof chrome !== 'undefined' && chrome.cookies) {
-            try {
-              if (chrome.cookies.getAll) {
-                const cookies = await new Promise(r => chrome.cookies.getAll({ name: '__session' }, r));
-                if (cookies && cookies.length > 0) {
-                  const matched = cookies.find(c => c.domain.includes('prompt-pro') || c.domain.includes('vercel') || c.domain.includes('localhost'));
-                  if (matched?.value) return matched.value;
-                  if (cookies[0]?.value) return cookies[0].value;
-                }
-              }
-              if (chrome.cookies.get) {
-                const c1 = await new Promise(r => chrome.cookies.get({ url: apiBase, name: '__session' }, r));
-                if (c1 && c1.value) return c1.value;
-                const c2 = await new Promise(r => chrome.cookies.get({ url: 'https://prompt-pro-liart.vercel.app', name: '__session' }, r));
-                if (c2 && c2.value) return c2.value;
-              }
-            } catch (_e) {}
-          }
-          return null;
-        };
-
         rewrittenPromise = (async () => {
+          let tokenToSend = await resolveFreshToken(session, apiBase);
           if (!tokenToSend) {
-            tokenToSend = await getCookieToken();
+            tokenToSend = await getCookieToken(apiBase);
           }
 
           // Generate client-side request ID for end-to-end trace correlation
@@ -1362,9 +1430,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
           }
 
+          // Transparent 401 retry: Check fresh cookie if token expired mid-session
+          if (response.status === 401) {
+            console.warn('[PromptPro] UPGRADE_PROMPT 401 received, checking for fresh session cookie...');
+            const freshCookie = await getCookieToken(apiBase);
+            if (freshCookie && freshCookie !== tokenToSend) {
+              tokenToSend = freshCookie;
+              headers['Authorization'] = `Bearer ${freshCookie}`;
+              chrome.storage.local.get(['authSession'], (res) => {
+                const cur = res.authSession || {};
+                chrome.storage.local.set({ authSession: { ...cur, token: freshCookie } });
+              });
+              try {
+                response = await fetch(apiUrl, { method: 'POST', headers, body });
+              } catch (_retryErr) {}
+            }
+          }
+
           if (!response.ok) {
             console.warn(`[PromptPro] API returned HTTP ${response.status}, gracefully falling back to local optimization engine`);
-            return { text: fallbackLocal(text, strategy, tone, lowTokenEnabled), isLlmApi: false };
+            return { text: fallbackLocal(text, strategy, tone, lowTokenEnabled), isLlmApi: false, authFallback: response.status === 401 };
           }
 
           const data = await response.json();
@@ -1664,20 +1749,6 @@ chrome.runtime.onInstalled.addListener((details) => {
 // AUTH CALLBACK — Watch for dashboard URL with extensionToken param
 // ═══════════════════════════════════════════════════════════════
 
-function decodeJWTPayload(token) {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    // Base64url decode the payload
-    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-    const json = atob(padded);
-    return JSON.parse(json);
-  } catch (e) {
-    console.warn('[PromptPro] Failed to decode JWT payload:', e);
-    return null;
-  }
-}
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete') return;

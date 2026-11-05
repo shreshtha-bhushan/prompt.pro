@@ -35,6 +35,7 @@ import { resolveRequestId, logPrefix } from "@/lib/request-id";
 import { callOpenRouter } from "@/lib/openrouter";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 
 function mapStrategyToMode(strategy?: string, requestedMode?: OptimizationMode): OptimizationMode {
@@ -191,9 +192,32 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // ── 6. Transactional Credit Deduction ─────────────────────
+  // ── 6. Transactional Credit Deduction & Safe Refund Watchdog ──
   const cost = CREDIT_COSTS[mode];
   let newBalance = profile.credits_balance;
+  let creditsDeducted = false;
+  let responseDelivered = false;
+  let creditsRefunded = false;
+
+  const safeRefund = async (reason: string) => {
+    if (creditsDeducted && !responseDelivered && !creditsRefunded && !isAdmin) {
+      creditsRefunded = true;
+      try {
+        await supabase.rpc("spend_credits", {
+          p_clerk_id: userId,
+          p_amount: -cost,
+          p_reason: reason,
+        });
+        console.log(lp(`Safe refund executed: ${reason}`));
+      } catch (refundErr) {
+        console.error(lp("Safe refund failed:"), refundErr);
+      }
+    }
+  };
+
+  request.signal.addEventListener("abort", () => {
+    safeRefund(`${mode}_aborted_refund`);
+  });
 
   if (!isAdmin) {
     const { data: balanceAfter, error: spendErr } = await supabase.rpc(
@@ -229,6 +253,7 @@ export async function POST(request: NextRequest) {
         });
         if (!retryRpc.error) {
           newBalance = retryRpc.data as number;
+          creditsDeducted = true;
         } else {
           console.error(lp("Retry spend failed:"), retryRpc.error);
           return NextResponse.json(
@@ -253,6 +278,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       newBalance = balanceAfter as number;
+      creditsDeducted = true;
     }
   }
 
@@ -305,56 +331,55 @@ CRITICAL INSTRUCTION:
     systemPrompt += "\n\nLow Token Directive: Compact all expressions for minimum prompt token length using concise bullet formatting. Never eliminate crucial task specifications, code, or parameters.";
   }
 
-  // Use resilient OpenRouter client with retry + backoff
-  const result = await callOpenRouter(
-    {
-      model: selectedModel,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `<user_input_prompt>\n${text}\n</user_input_prompt>` },
-      ],
-      temperature: 0.3,
-      max_tokens: lowTokenEnabled ? 1024 : 2048,
-    },
-    requestId
-  );
+  try {
+    // Use resilient OpenRouter client with retry + backoff (bounded for 30s serverless timeout)
+    const result = await callOpenRouter(
+      {
+        model: selectedModel,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `<user_input_prompt>\n${text}\n</user_input_prompt>` },
+        ],
+        temperature: 0.3,
+        max_tokens: lowTokenEnabled ? 1024 : 2048,
+      },
+      requestId,
+      { maxRetries: 1, timeoutMs: 11000 }
+    );
 
-  if (!result.ok) {
-    console.error(lp(`OpenRouter failed: ${result.code} (HTTP ${result.status})`));
+    if (!result.ok) {
+      console.error(lp(`OpenRouter failed: ${result.code} (HTTP ${result.status})`));
+      await safeRefund(`${mode}_optimize_refund`);
 
-    // Automatic credit refund on failure
-    if (!isAdmin) {
-      try {
-        await supabase.rpc("spend_credits", {
-          p_clerk_id: userId,
-          p_amount: -cost,
-          p_reason: `${mode}_optimize_refund`,
-        });
-      } catch (refundErr) {
-        console.error(lp("Refund failed:"), refundErr);
-      }
+      return NextResponse.json(
+        {
+          error: "optimization_failed",
+          message: result.message + " Any deducted credits have been refunded.",
+          code: result.code,
+          model: selectedModel,
+          requestId,
+        },
+        { status: result.status >= 400 && result.status < 600 ? result.status : 502, headers: corsHeaders }
+      );
     }
 
+    responseDelivered = true;
     return NextResponse.json(
       {
-        error: "optimization_failed",
-        message: result.message + " Any deducted credits have been refunded.",
-        code: result.code,
+        success: true,
+        rewritten: result.content,
+        creditsBalance: newBalance,
         model: selectedModel,
         requestId,
       },
-      { status: result.status >= 400 && result.status < 600 ? result.status : 502, headers: corsHeaders }
+      { status: 200, headers: corsHeaders }
     );
+  } catch (err) {
+    await safeRefund(`${mode}_error_refund`);
+    throw err;
+  } finally {
+    if (!responseDelivered) {
+      await safeRefund(`${mode}_unhandled_abort_refund`);
+    }
   }
-
-  return NextResponse.json(
-    {
-      success: true,
-      rewritten: result.content,
-      creditsBalance: newBalance,
-      model: selectedModel,
-      requestId,
-    },
-    { status: 200, headers: corsHeaders }
-  );
 }

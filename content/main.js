@@ -847,7 +847,11 @@
 
     findInjectPoint() {
       const sendBtn = this.getSendButton();
-      if (!sendBtn) return null;
+      if (!sendBtn) {
+        const toolbar = this.getToolbar();
+        if (toolbar) return { parent: toolbar, before: null };
+        return null;
+      }
 
       // Walk up from the send button to find the horizontal actions row.
       // Gemini typically wraps the send button in a narrow single-child div.
@@ -871,6 +875,11 @@
       // Insert our container right before the send button's wrapper.
       if (parent) {
         return { parent: parent, before: anchor };
+      }
+
+      const toolbar = this.getToolbar();
+      if (toolbar) {
+        return { parent: toolbar, before: null };
       }
 
       return null;
@@ -2715,7 +2724,9 @@
       this.debounceTimer = null;
       this.bodyObserver = null;
       this._rafId = null;
+      this._watchdogInterval = null;
       this._onFocusIn = this._onFocusIn.bind(this);
+      this._onInteraction = this._onInteraction.bind(this);
     }
 
     start() {
@@ -2858,8 +2869,18 @@
       // Fix 6: SPA navigation detection
       this._watchNavigation();
 
-      // Focus backup
-      document.addEventListener('focusin', this._onFocusIn);
+      // Fix 7: Composer focus & interaction watchdog (capturing to bypass host stopPropagation)
+      document.addEventListener('focusin', this._onFocusIn, { capture: true, passive: true });
+      document.addEventListener('pointerdown', this._onInteraction, { capture: true, passive: true });
+
+      // Fix 8: Periodic liveness heartbeat (self-heals silent React unmounts every 2.5s)
+      if (this._watchdogInterval) clearInterval(this._watchdogInterval);
+      this._watchdogInterval = setInterval(() => {
+        if (document.hidden) return;
+        if (!isInjected(this.adapter)) {
+          this._attemptInject();
+        }
+      }, 2500);
 
       // Start instant autocomplete and quick-commands engine
       this._startAutocompleteEngine();
@@ -3675,34 +3696,45 @@
     _onFocusIn(e) {
       if (isInjected(this.adapter)) return;
       const t = e.target;
-      if (t && (t.contentEditable === 'true' || t.contentEditable === '' || t.contentEditable === 'plaintext-only' || t.isContentEditable || t.tagName === 'TEXTAREA')) {
-        setTimeout(() => this._attemptInject(), 80);
+      if (!t) return;
+      const input = this.adapter?.getInputField?.();
+      const isTarget = (input && (t === input || input.contains(t))) ||
+        t.isContentEditable ||
+        t.tagName === 'TEXTAREA' ||
+        (typeof t.closest === 'function' && t.closest('textarea, [contenteditable="true"], .ProseMirror, [data-testid*="composer"], div[class*="composer"], form, fieldset'));
+      if (isTarget) {
+        this._attemptInject();
+      }
+    }
+
+    _onInteraction(e) {
+      if (isInjected(this.adapter)) return;
+      const t = e.target;
+      if (!t) return;
+      const input = this.adapter?.getInputField?.();
+      const isTarget = (input && (t === input || input.contains(t))) ||
+        t.isContentEditable ||
+        t.tagName === 'TEXTAREA' ||
+        (typeof t.closest === 'function' && t.closest('textarea, [contenteditable="true"], .ProseMirror, [data-testid*="composer"], div[class*="composer"], button[aria-label*="send" i], button[data-testid*="send" i]'));
+      if (isTarget) {
+        this._attemptInject();
       }
     }
 
     /**
      * Fix 1: Persistent body observer.
      * NEVER disconnects. Checks if button is still connected on every mutation batch.
-     * Debounced + RAF coalesced for performance.
+     * Debounced + RAF coalesced for performance without dropped mutations.
      */
     _startBodyObserver() {
       if (this.bodyObserver) return; // already running
 
-      let isScheduled = false;
-
       this.bodyObserver = new MutationObserver(() => {
-        if (isScheduled) return;
-        isScheduled = true;
-        
-        // Wait for DOM to settle
-        setTimeout(() => {
-          isScheduled = false;
-          // Fast path: button exists AND is connected to active composer
-          if (isInjected(this.adapter)) return;
+        // Fast path: button exists AND is connected to active composer
+        if (isInjected(this.adapter)) return;
 
-          // Button gone or in stale container — schedule reinject
-          this._scheduleReinject();
-        }, 150);
+        // Button gone or in stale container — schedule reinject
+        this._scheduleReinject();
       });
 
       this.bodyObserver.observe(document.body, {

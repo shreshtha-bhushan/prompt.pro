@@ -37,6 +37,7 @@ import { resolveRequestId, logPrefix } from "@/lib/request-id";
 import { callOpenRouter } from "@/lib/openrouter";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 
 const REASON_BY_MODE: Record<
@@ -178,9 +179,32 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── 6. Transactional Credit Spend ─────────────────────────
+  // ── 6. Transactional Credit Spend & Safe Refund Watchdog ──
   const cost = CREDIT_COSTS[mode];
   let newBalance = profile.credits_balance;
+  let creditsDeducted = false;
+  let responseDelivered = false;
+  let creditsRefunded = false;
+
+  const safeRefund = async (reason: string) => {
+    if (creditsDeducted && !responseDelivered && !creditsRefunded && !isAdmin) {
+      creditsRefunded = true;
+      try {
+        await supabase.rpc("spend_credits", {
+          p_clerk_id: userId,
+          p_amount: -cost,
+          p_reason: reason,
+        });
+        console.log(lp(`Safe refund executed: ${reason}`));
+      } catch (refundErr) {
+        console.error(lp("Failed to refund credits:"), refundErr);
+      }
+    }
+  };
+
+  request.signal.addEventListener("abort", () => {
+    safeRefund(`${REASON_BY_MODE[mode]}_aborted_refund`);
+  });
 
   if (!isAdmin) {
     const { data: balanceAfter, error: spendErr } = await supabase.rpc(
@@ -224,6 +248,7 @@ export async function POST(request: NextRequest) {
         });
         if (!retryRpc.error) {
           newBalance = retryRpc.data as number;
+          creditsDeducted = true;
         } else {
           console.error(lp("Retry spend failed:"), retryRpc.error);
           return NextResponse.json(
@@ -248,66 +273,65 @@ export async function POST(request: NextRequest) {
       }
     } else {
       newBalance = balanceAfter as number;
+      creditsDeducted = true;
     }
   }
 
-  // ── 7. Run AI Optimization via Resilient OpenRouter Client ───────
-  const optimizationResult = await runOptimization(prompt, mode, requestId);
+  try {
+    // ── 7. Run AI Optimization via Resilient OpenRouter Client ───────
+    const optimizationResult = await runOptimization(prompt, mode, requestId);
 
-  if (!optimizationResult.ok) {
-    console.error(lp(`OpenRouter failed: ${optimizationResult.code} (HTTP ${optimizationResult.status})`));
+    if (!optimizationResult.ok) {
+      console.error(lp(`OpenRouter failed: ${optimizationResult.code} (HTTP ${optimizationResult.status})`));
+      await safeRefund(`${REASON_BY_MODE[mode]}_refund`);
 
-    // Automatic credit refund on downstream LLM failure
-    if (!isAdmin) {
-      try {
-        await supabase.rpc("spend_credits", {
-          p_clerk_id: userId,
-          p_amount: -cost, // refund
-          p_reason: `${REASON_BY_MODE[mode]}_refund`,
-        });
-      } catch (refundErr) {
-        console.error(lp("Failed to refund credits:"), refundErr);
-      }
+      const posthog = getPostHogClient();
+      posthog.capture({
+        distinctId: userId,
+        event: "optimization_failed",
+        properties: { mode, error_type: optimizationResult.code, requestId },
+      });
+      await shutdownPosthog();
+
+      return NextResponse.json(
+        {
+          error: "optimization_failed",
+          message: optimizationResult.message + " Credits have been refunded.",
+          code: optimizationResult.code,
+          requestId,
+        },
+        { status: optimizationResult.status >= 400 && optimizationResult.status < 600 ? optimizationResult.status : 502, headers: corsHeaders }
+      );
     }
 
+    // ── 8. Success Response ───────────────────────────────────
     const posthog = getPostHogClient();
     posthog.capture({
       distinctId: userId,
-      event: "optimization_failed",
-      properties: { mode, error_type: optimizationResult.code, requestId },
+      event: "optimization_run",
+      properties: { mode, credits_balance: newBalance, cost, source: "api", requestId },
     });
     await shutdownPosthog();
 
+    responseDelivered = true;
     return NextResponse.json(
       {
-        error: "optimization_failed",
-        message: optimizationResult.message + " Credits have been refunded.",
-        code: optimizationResult.code,
+        success: true,
+        result: optimizationResult.content,
+        rewritten: optimizationResult.content,
+        creditsBalance: newBalance,
         requestId,
       },
-      { status: optimizationResult.status >= 400 && optimizationResult.status < 600 ? optimizationResult.status : 502, headers: corsHeaders }
+      { headers: corsHeaders }
     );
+  } catch (err) {
+    await safeRefund(`${REASON_BY_MODE[mode]}_error_refund`);
+    throw err;
+  } finally {
+    if (!responseDelivered) {
+      await safeRefund(`${REASON_BY_MODE[mode]}_unhandled_abort_refund`);
+    }
   }
-
-  // ── 8. Success Response ───────────────────────────────────
-  const posthog = getPostHogClient();
-  posthog.capture({
-    distinctId: userId,
-    event: "optimization_run",
-    properties: { mode, credits_balance: newBalance, cost, source: "api", requestId },
-  });
-  await shutdownPosthog();
-
-  return NextResponse.json(
-    {
-      success: true,
-      result: optimizationResult.content,
-      rewritten: optimizationResult.content,
-      creditsBalance: newBalance,
-      requestId,
-    },
-    { headers: corsHeaders }
-  );
 }
 
 /**
@@ -381,6 +405,7 @@ SECURITY & EXECUTION RULES:
       ],
       temperature: 0.3,
     },
-    requestId
+    requestId,
+    { maxRetries: 1, timeoutMs: 11000 }
   );
 }
